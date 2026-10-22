@@ -1,0 +1,13 @@
+# Files to exclude from Vercel Lambda deployment bundle
+app/ml/credit_data.csv
+app/ml/explainer.pkl
+app/ml/generate_data.py
+app/ml/train_model.py
+test_app.py
+test_e2e.py
+test_server.py
+start_server.bat
+launch_server.py
+server.log
+*.md
+.git*

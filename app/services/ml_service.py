@@ -1,8 +1,10 @@
+import os
 import pickle
 import numpy as np
 import logging
 import json
-from app.config import MODEL_PATH, EXPLAINER_PATH, FEATURE_NAMES
+import xgboost as xgb
+from app.config import MODEL_JSON_PATH, MODEL_PATH, EXPLAINER_PATH, FEATURE_NAMES
 from app.models import LoanApplication
 
 logger = logging.getLogger(__name__)
@@ -10,20 +12,36 @@ logger = logging.getLogger(__name__)
 class MLService:
     def __init__(self):
         self.feature_names = FEATURE_NAMES
+        self.booster = None
         self.model = None
         self.explainer = None
         
-        try:
-            with open(MODEL_PATH, 'rb') as f:
-                self.model = pickle.load(f)
-        except Exception as e:
-            logger.warning(f"Could not load model from {MODEL_PATH}: {e}")
+        # 1. Preferred: Load native XGBoost JSON booster (standalone, 0 heavy dependencies)
+        if os.path.exists(MODEL_JSON_PATH):
+            try:
+                self.booster = xgb.Booster()
+                self.booster.load_model(MODEL_JSON_PATH)
+                logger.info("Loaded native XGBoost booster from model.json")
+            except Exception as e:
+                logger.warning(f"Could not load native booster from {MODEL_JSON_PATH}: {e}")
+
+        # 2. Fallback: Load pickle model if booster not loaded
+        if self.booster is None and os.path.exists(MODEL_PATH):
+            try:
+                with open(MODEL_PATH, 'rb') as f:
+                    self.model = pickle.load(f)
+                    if hasattr(self.model, 'get_booster'):
+                        self.booster = self.model.get_booster()
+            except Exception as e:
+                logger.warning(f"Could not load model from {MODEL_PATH}: {e}")
             
-        try:
-            with open(EXPLAINER_PATH, 'rb') as f:
-                self.explainer = pickle.load(f)
-        except Exception as e:
-            logger.warning(f"Could not load explainer from {EXPLAINER_PATH}: {e}")
+        # 3. Optional: Explainer pickle fallback
+        if os.path.exists(EXPLAINER_PATH):
+            try:
+                with open(EXPLAINER_PATH, 'rb') as f:
+                    self.explainer = pickle.load(f)
+            except Exception as e:
+                logger.info(f"Using native XGBoost TreeSHAP instead of explainer.pkl: {e}")
 
     def predict(self, application: LoanApplication) -> dict:
         emp_type_map = {'unemployed': 0, 'student': 1, 'retired': 2, 'self_employed': 3, 'salaried': 4}
@@ -48,11 +66,21 @@ class MLService:
         ]
 
         X = np.array([features])
-        
         prob_default = 0.5
-        if self.model:
-            prob = self.model.predict_proba(X)
-            prob_default = prob[0][1] if prob.shape[1] > 1 else prob[0][0]
+
+        # Perform prediction using native booster or sklearn wrapper
+        if self.booster is not None:
+            try:
+                dmat = xgb.DMatrix(X, feature_names=self.feature_names)
+                prob_default = float(self.booster.predict(dmat)[0])
+            except Exception as e:
+                logger.warning(f"Booster prediction failed: {e}")
+        elif self.model is not None:
+            try:
+                prob = self.model.predict_proba(X)
+                prob_default = float(prob[0][1] if prob.shape[1] > 1 else prob[0][0])
+            except Exception as e:
+                logger.warning(f"Model prediction failed: {e}")
             
         credit_score = int((1 - prob_default) * 1000)
         
@@ -70,7 +98,18 @@ class MLService:
         top_risk_factors = []
         top_protective_factors = []
         
-        if self.explainer:
+        # Calculate SHAP values (native TreeSHAP in C++ core or explainer fallback)
+        shap_vals = None
+        if self.booster is not None:
+            try:
+                dmat = xgb.DMatrix(X, feature_names=self.feature_names)
+                # pred_contribs=True returns exact TreeSHAP values for each feature + base margin
+                contribs = self.booster.predict(dmat, pred_contribs=True)[0]
+                shap_vals = contribs[:len(self.feature_names)]
+            except Exception as e:
+                logger.warning(f"Native TreeSHAP calculation failed: {e}")
+
+        if shap_vals is None and self.explainer is not None:
             try:
                 sv = self.explainer.shap_values(X)
                 if isinstance(sv, list):
@@ -81,11 +120,15 @@ class MLService:
                         shap_vals = shap_vals[:, 1] if shap_vals.shape[1] > 1 else shap_vals[:, 0]
                 else:
                     shap_vals = sv[0]
-                    
+            except Exception as e:
+                logger.warning(f"Fallback explainer failed: {e}")
+
+        if shap_vals is not None:
+            try:
                 contributions = []
                 for i, name in enumerate(self.feature_names):
-                    val = shap_vals[i]
-                    shap_values_out[name] = float(val)
+                    val = float(shap_vals[i])
+                    shap_values_out[name] = val
                     human_name = name.replace('_', ' ').capitalize()
                     feat_val = features[i]
                     direction = 'increases' if val > 0 else 'decreases'
@@ -94,7 +137,7 @@ class MLService:
                         'feature': name,
                         'human_name': human_name,
                         'value': feat_val,
-                        'shap': float(val),
+                        'shap': val,
                         'impact': impact,
                         'direction': direction
                     })
@@ -115,7 +158,7 @@ class MLService:
                         top_protective_factors.append(f"Your {f['human_name'].lower()} ({f['value']}) {f['impact']} decreases your default risk")
 
             except Exception as e:
-                logger.warning(f"Error computing SHAP values: {e}")
+                logger.warning(f"Error processing SHAP contributions: {e}")
                 
         rec_summaries = {
             'low': 'Excellent credit profile. You are highly likely to be approved for most loan products.',

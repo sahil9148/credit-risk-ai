@@ -1,47 +1,90 @@
 import os
-import pickle
-import numpy as np
-import logging
+import math
 import json
-import xgboost as xgb
-from app.config import MODEL_JSON_PATH, MODEL_PATH, EXPLAINER_PATH, FEATURE_NAMES
+import logging
+from app.config import MODEL_JSON_PATH, MODEL_PATH, FEATURE_NAMES
 from app.models import LoanApplication
 
 logger = logging.getLogger(__name__)
 
+# Lightweight standalone tree predictor (zero heavy dependencies for serverless deployment)
+class LightweightTreeModel:
+    def __init__(self, json_path: str):
+        with open(json_path, 'r', encoding='utf-8') as f:
+            d = json.load(f)
+        self.trees = d['learner']['gradient_booster']['model']['trees']
+        raw_bs = d['learner']['learner_model_param']['base_score'].strip('[]')
+        self.base_score = float(raw_bs)
+        self.base_margin = math.log(self.base_score / (1.0 - self.base_score))
+        self.feature_names = d['learner']['feature_names']
+        
+    def predict_proba(self, features: list) -> float:
+        total_margin = 0.0
+        for tree in self.trees:
+            lefts = tree['left_children']
+            rights = tree['right_children']
+            split_indices = tree['split_indices']
+            split_conditions = tree['split_conditions']
+            node = 0
+            while lefts[node] != -1:
+                feat_idx = split_indices[node]
+                val = features[feat_idx]
+                if val < split_conditions[node]:
+                    node = lefts[node]
+                else:
+                    node = rights[node]
+            total_margin += split_conditions[node]
+        margin = total_margin + self.base_margin
+        prob = 1.0 / (1.0 + math.exp(-margin))
+        return float(prob)
+        
+    def predict_attributions(self, features: list) -> dict:
+        attribs = {name: 0.0 for name in self.feature_names}
+        for tree in self.trees:
+            lefts = tree['left_children']
+            rights = tree['right_children']
+            split_indices = tree['split_indices']
+            split_conditions = tree['split_conditions']
+            base_weights = tree['base_weights']
+            node = 0
+            while lefts[node] != -1:
+                feat_idx = split_indices[node]
+                val = features[feat_idx]
+                parent_weight = base_weights[node]
+                if val < split_conditions[node]:
+                    child = lefts[node]
+                else:
+                    child = rights[node]
+                child_weight = base_weights[child]
+                attribs[self.feature_names[feat_idx]] += (child_weight - parent_weight)
+                node = child
+        # Normalize scale for clear visualization on waterfall chart
+        max_abs = max([abs(v) for v in attribs.values()] or [1.0])
+        return {k: round(v / (max_abs * 2.0), 4) for k, v in attribs.items()}
+
+
 class MLService:
     def __init__(self):
         self.feature_names = FEATURE_NAMES
-        self.booster = None
-        self.model = None
-        self.explainer = None
-        
-        # 1. Preferred: Load native XGBoost JSON booster (standalone, 0 heavy dependencies)
+        self.lightweight_model = None
+        self.xgb_booster = None
+
+        # 1. Preferred: Lightweight pure-Python model (0 MB extra dependencies, works in any serverless lambda)
         if os.path.exists(MODEL_JSON_PATH):
             try:
-                self.booster = xgb.Booster()
-                self.booster.load_model(MODEL_JSON_PATH)
-                logger.info("Loaded native XGBoost booster from model.json")
+                self.lightweight_model = LightweightTreeModel(MODEL_JSON_PATH)
+                logger.info("Loaded LightweightTreeModel from model.json")
             except Exception as e:
-                logger.warning(f"Could not load native booster from {MODEL_JSON_PATH}: {e}")
+                logger.warning(f"Could not load lightweight tree model: {e}")
 
-        # 2. Fallback: Load pickle model if booster not loaded
-        if self.booster is None and os.path.exists(MODEL_PATH):
-            try:
-                with open(MODEL_PATH, 'rb') as f:
-                    self.model = pickle.load(f)
-                    if hasattr(self.model, 'get_booster'):
-                        self.booster = self.model.get_booster()
-            except Exception as e:
-                logger.warning(f"Could not load model from {MODEL_PATH}: {e}")
-            
-        # 3. Optional: Explainer pickle fallback
-        if os.path.exists(EXPLAINER_PATH):
-            try:
-                with open(EXPLAINER_PATH, 'rb') as f:
-                    self.explainer = pickle.load(f)
-            except Exception as e:
-                logger.info(f"Using native XGBoost TreeSHAP instead of explainer.pkl: {e}")
+        # 2. Optional: Try loading XGBoost booster if xgboost is installed in environment
+        try:
+            import xgboost as xgb
+            if os.path.exists(MODEL_JSON_PATH):
+                self.xgb_booster = xgb.Booster()
+                self.xgb_booster.load_model(MODEL_JSON_PATH)
+        except Exception:
+            pass
 
     def predict(self, application: LoanApplication) -> dict:
         emp_type_map = {'unemployed': 0, 'student': 1, 'retired': 2, 'self_employed': 3, 'salaried': 4}
@@ -65,23 +108,27 @@ class MLService:
             float(application.debt_to_income_ratio)
         ]
 
-        X = np.array([features])
         prob_default = 0.5
+        shap_values_out = {}
 
-        # Perform prediction using native booster or sklearn wrapper
-        if self.booster is not None:
+        # 1. Prediction & Attribution via Lightweight Pure-Python Model
+        if self.lightweight_model is not None:
             try:
-                dmat = xgb.DMatrix(X, feature_names=self.feature_names)
-                prob_default = float(self.booster.predict(dmat)[0])
+                prob_default = self.lightweight_model.predict_proba(features)
+                shap_values_out = self.lightweight_model.predict_attributions(features)
             except Exception as e:
-                logger.warning(f"Booster prediction failed: {e}")
-        elif self.model is not None:
+                logger.warning(f"Lightweight prediction error: {e}")
+        # 2. Fallback to XGBoost native booster if available
+        elif self.xgb_booster is not None:
             try:
-                prob = self.model.predict_proba(X)
-                prob_default = float(prob[0][1] if prob.shape[1] > 1 else prob[0][0])
+                import xgboost as xgb
+                dmat = xgb.DMatrix([features], feature_names=self.feature_names)
+                prob_default = float(self.xgb_booster.predict(dmat)[0])
+                contribs = self.xgb_booster.predict(dmat, pred_contribs=True)[0]
+                shap_values_out = {self.feature_names[i]: float(contribs[i]) for i in range(len(self.feature_names))}
             except Exception as e:
-                logger.warning(f"Model prediction failed: {e}")
-            
+                logger.warning(f"XGBoost booster error: {e}")
+
         credit_score = int((1 - prob_default) * 1000)
         
         if credit_score >= 750:
@@ -92,81 +139,49 @@ class MLService:
             risk_category = 'high'
         else:
             risk_category = 'very_high'
-            
-        shap_values_out = {}
+
         feature_contributions = []
         top_risk_factors = []
         top_protective_factors = []
-        
-        # Calculate SHAP values (native TreeSHAP in C++ core or explainer fallback)
-        shap_vals = None
-        if self.booster is not None:
-            try:
-                dmat = xgb.DMatrix(X, feature_names=self.feature_names)
-                # pred_contribs=True returns exact TreeSHAP values for each feature + base margin
-                contribs = self.booster.predict(dmat, pred_contribs=True)[0]
-                shap_vals = contribs[:len(self.feature_names)]
-            except Exception as e:
-                logger.warning(f"Native TreeSHAP calculation failed: {e}")
 
-        if shap_vals is None and self.explainer is not None:
-            try:
-                sv = self.explainer.shap_values(X)
-                if isinstance(sv, list):
-                    shap_vals = sv[1][0] if len(sv) > 1 else sv[0][0]
-                elif hasattr(sv, 'values'):
-                    shap_vals = sv.values[0]
-                    if len(shap_vals.shape) > 1:
-                        shap_vals = shap_vals[:, 1] if shap_vals.shape[1] > 1 else shap_vals[:, 0]
-                else:
-                    shap_vals = sv[0]
-            except Exception as e:
-                logger.warning(f"Fallback explainer failed: {e}")
+        if shap_values_out:
+            contributions = []
+            for i, name in enumerate(self.feature_names):
+                val = float(shap_values_out.get(name, 0.0))
+                human_name = name.replace('_', ' ').capitalize()
+                feat_val = features[i]
+                direction = 'increases' if val > 0 else 'decreases'
+                impact = 'significantly' if abs(val) > 0.1 else 'slightly'
+                contributions.append({
+                    'feature': name,
+                    'human_name': human_name,
+                    'value': feat_val,
+                    'shap': val,
+                    'impact': impact,
+                    'direction': direction
+                })
 
-        if shap_vals is not None:
-            try:
-                contributions = []
-                for i, name in enumerate(self.feature_names):
-                    val = float(shap_vals[i])
-                    shap_values_out[name] = val
-                    human_name = name.replace('_', ' ').capitalize()
-                    feat_val = features[i]
-                    direction = 'increases' if val > 0 else 'decreases'
-                    impact = 'significantly' if abs(val) > 0.1 else 'slightly'
-                    contributions.append({
-                        'feature': name,
-                        'human_name': human_name,
-                        'value': feat_val,
-                        'shap': val,
-                        'impact': impact,
-                        'direction': direction
-                    })
-                    
-                feature_contributions = sorted(contributions, key=lambda x: abs(x['shap']), reverse=True)
-                
-                sorted_by_val = sorted(contributions, key=lambda x: x['shap'])
-                top_protective = sorted_by_val[:3]
-                top_risk = sorted_by_val[-3:]
-                top_risk.reverse()
-                
-                for f in top_risk:
-                    if f['shap'] > 0:
-                        top_risk_factors.append(f"Your {f['human_name'].lower()} ({f['value']}) {f['impact']} increases your default risk")
-                
-                for f in top_protective:
-                    if f['shap'] < 0:
-                        top_protective_factors.append(f"Your {f['human_name'].lower()} ({f['value']}) {f['impact']} decreases your default risk")
+            feature_contributions = sorted(contributions, key=lambda x: abs(x['shap']), reverse=True)
+            sorted_by_val = sorted(contributions, key=lambda x: x['shap'])
+            top_protective = sorted_by_val[:3]
+            top_risk = sorted_by_val[-3:]
+            top_risk.reverse()
 
-            except Exception as e:
-                logger.warning(f"Error processing SHAP contributions: {e}")
-                
+            for f in top_risk:
+                if f['shap'] > 0:
+                    top_risk_factors.append(f"Your {f['human_name'].lower()} ({f['value']}) {f['impact']} increases your default risk")
+
+            for f in top_protective:
+                if f['shap'] < 0:
+                    top_protective_factors.append(f"Your {f['human_name'].lower()} ({f['value']}) {f['impact']} decreases your default risk")
+
         rec_summaries = {
             'low': 'Excellent credit profile. You are highly likely to be approved for most loan products.',
             'medium': 'Good credit profile. You are likely to be approved, but may face slightly higher interest rates.',
             'high': 'High risk profile. Approval may be difficult, consider improving your credit factors before applying.',
             'very_high': 'Very high risk profile. It is strongly recommended to work on reducing debt and improving payment history.'
         }
-        
+
         return {
             'credit_score': credit_score,
             'risk_category': risk_category,

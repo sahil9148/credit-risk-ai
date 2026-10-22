@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+
+{% block title %}Apply for Loan - Credit Risk AI{% endblock %}
+
+{% block content %}
+<div class="flex h-screen bg-gray-50 overflow-hidden" x-data="{ sidebarOpen: false }">
+    <!-- Mobile sidebar backdrop -->
+    <div x-show="sidebarOpen" class="fixed inset-0 z-20 bg-black bg-opacity-50 transition-opacity lg:hidden" @click="sidebarOpen = false"></div>
+
+    <!-- SIDEBAR (Same as dashboard) -->
+    <div :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'" class="fixed inset-y-0 left-0 z-30 w-64 bg-gray-900 overflow-y-auto transition duration-300 transform lg:translate-x-0 lg:static lg:inset-auto flex flex-col">
+        <div class="flex items-center justify-center mt-8">
+            <a href="/" class="flex items-center hover:opacity-80 transition-opacity">
+                <span class="text-white text-2xl font-semibold">🏦 Credit Risk AI</span>
+            </a>
+        </div>
+        <nav class="mt-10 flex-1 px-2 space-y-2">
+            <a href="/dashboard" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">📊</span> Dashboard
+            </a>
+            <a href="/dashboard/apply" class="flex items-center px-4 py-3 bg-gray-800 text-white rounded-md">
+                <span class="mr-3">📝</span> Apply for Loan
+            </a>
+            <a href="/dashboard/history" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">🕒</span> Application History
+            </a>
+            {% if user and user.is_admin %}
+            <a href="/admin" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">⚙️</span> Admin Panel
+            </a>
+            {% endif %}
+        </nav>
+        <div class="p-4 border-t border-gray-800">
+            <div class="flex items-center mb-4">
+                <div class="flex-shrink-0">
+                    <div class="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white font-bold">{{ user.full_name[0]|upper if user else 'U' }}</div>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium text-white">{{ user.full_name if user else 'User' }}</p>
+                    <p class="text-xs text-gray-400">{{ user.email if user else 'user@example.com' }}</p>
+                </div>
+            </div>
+            <form action="/api/auth/logout" method="POST">
+                <button type="submit" class="w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors">
+                    Logout
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+        <header class="bg-white shadow-sm lg:static lg:overflow-y-visible z-10">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="relative flex justify-between xl:grid xl:grid-cols-12 lg:gap-8 pb-2 pt-4">
+                    <div class="flex md:absolute md:left-0 md:inset-y-0 lg:static xl:col-span-2">
+                        <button @click="sidebarOpen = true" class="-ml-2 mx-2 p-2 rounded-md text-gray-400 hover:text-gray-500 lg:hidden">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                        </button>
+                        <h1 class="text-2xl font-semibold text-gray-900 hidden lg:block">Apply for Loan</h1>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-6 lg:p-8">
+            <div class="max-w-3xl mx-auto" x-data="{
+                step: 1,
+                formData: {
+                    age: '', employment_type: 'salaried', employment_length: '', home_ownership: 'rent',
+                    annual_income: '', existing_debt: '', num_credit_lines: '', credit_history_length: '',
+                    late_payments: '0', bankruptcies: '0',
+                    loan_amount: '10000', loan_purpose: 'personal', loan_tenure: '12'
+                },
+                nextStep() { if(this.step < 4) this.step++; window.scrollTo(0, 0); },
+                prevStep() { if(this.step > 1) this.step--; window.scrollTo(0, 0); }
+            }">
+
+                <!-- Progress Bar -->
+                <div class="mb-8">
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1 relative">
+                            <div class="absolute inset-0 flex items-center" aria-hidden="true">
+                                <div class="w-full border-t-2" :class="step > 1 ? 'border-primary' : 'border-gray-200'"></div>
+                            </div>
+                            <div class="relative flex justify-start">
+                                <span class="h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium" :class="step >= 1 ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'">1</span>
+                            </div>
+                        </div>
+                        <div class="flex-1 relative">
+                            <div class="absolute inset-0 flex items-center" aria-hidden="true">
+                                <div class="w-full border-t-2" :class="step > 2 ? 'border-primary' : 'border-gray-200'"></div>
+                            </div>
+                            <div class="relative flex justify-center">
+                                <span class="h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium" :class="step >= 2 ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'">2</span>
+                            </div>
+                        </div>
+                        <div class="flex-1 relative">
+                            <div class="absolute inset-0 flex items-center" aria-hidden="true">
+                                <div class="w-full border-t-2" :class="step > 3 ? 'border-primary' : 'border-gray-200'"></div>
+                            </div>
+                            <div class="relative flex justify-center">
+                                <span class="h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium" :class="step >= 3 ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'">3</span>
+                            </div>
+                        </div>
+                        <div class="relative">
+                            <div class="relative flex justify-end">
+                                <span class="h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium" :class="step >= 4 ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'">4</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between mt-2 text-xs font-medium text-gray-500">
+                        <span :class="{'text-primary': step >= 1}">Personal</span>
+                        <span :class="{'text-primary': step >= 2}">Financial</span>
+                        <span :class="{'text-primary': step >= 3}">Loan</span>
+                        <span :class="{'text-primary': step >= 4}">Review</span>
+                    </div>
+                </div>
+
+                <div class="bg-white shadow rounded-lg px-4 py-6 sm:p-8">
+                    <form action="/api/applications/" method="POST" id="loanForm">
+                        
+                        <!-- STEP 1 -->
+                        <div x-show="step === 1" x-transition.opacity>
+                            <h2 class="text-xl font-bold text-gray-900 mb-6">Personal Information</h2>
+                            <div class="space-y-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Full Name</label>
+                                    <input type="text" disabled value="{{ user.full_name if user else '' }}" class="mt-1 block w-full bg-gray-100 border-gray-300 rounded-md shadow-sm sm:text-sm py-2 px-3 border cursor-not-allowed">
+                                    <input type="hidden" name="full_name" value="{{ user.full_name if user else '' }}">
+                                    <p class="mt-1 text-xs text-gray-500">Name is synced from your account profile.</p>
+                                </div>
+                                <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                    <div>
+                                        <label for="age" class="block text-sm font-medium text-gray-700">Age</label>
+                                        <input type="number" name="age" id="age" min="18" max="120" x-model="formData.age" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm py-2 px-3 border">
+                                    </div>
+                                    <div>
+                                        <label for="employment_type" class="block text-sm font-medium text-gray-700">Employment Type</label>
+                                        <select name="employment_type" id="employment_type" x-model="formData.employment_type" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm py-2 px-3 border bg-white">
+                                            <option value="salaried">Salaried</option>
+                                            <option value="self_employed">Self Employed</option>
+                                            <option value="student">Student</option>
+                                            <option value="retired">Retired</option>
+                                            <option value="unemployed">Unemployed</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label for="employment_length" class="block text-sm font-medium text-gray-700">Employment Length (Years)</label>
+                                        <input type="number" name="employment_length" id="employment_length" min="0" step="0.5" x-model="formData.employment_length" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm py-2 px-3 border">
+                                    </div>
+                                    <div>
+                                        <label for="home_ownership" class="block text-sm font-medium text-gray-700">Home Ownership</label>
+                                        <select name="home_ownership" id="home_ownership" x-model="formData.home_ownership" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm py-2 px-3 border bg-white">
+                                            <option value="own">Own (No Mortgage)</option>
+                                            <option value="mortgage">Mortgage</option>
+                                            <option value="rent">Rent</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-8 flex justify-end">
+                                <button type="button" @click="if(formData.age && formData.employment_length !== '') nextStep()" class="bg-primary text-white px-4 py-2 rounded-md font-medium hover:bg-blue-900 transition-colors">Next Step</button>
+                            </div>
+                        </div>
+
+                        <!-- STEP 2 -->
+                        <div x-show="step === 2" x-transition.opacity style="display: none;">
+                            <h2 class="text-xl font-bold text-gray-900 mb-6">Financial Information</h2>
+                            <div class="space-y-6">
+                                <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                    <div>
+                                        <label for="annual_income" class="block text-sm font-medium text-gray-700">Annual Income (₹)</label>
+                                        <input type="number" name="annual_income" id="annual_income" min="0" x-model="formData.annual_income" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm py-2 px-3 border">
+                                    </div>
+                                    <div>
+                                        <label for="existing_debt" class="block text-sm font-medium text-gray-700">Existing Debt (₹)</label>
+                                        <input type="number" name="existing_debt" id="existing_debt" min="0" x-model="formData.existing_debt" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm py-2 px-3 border">
+                                    </div>
+                                    <div>
+                                        <label for="num_credit_lines" class="block text-sm font-medium text-gray-700">Number of Open Credit Lines</label>
+                                        <input type="number" name="num_credit_lines" id="num_credit_lines" min="0" x-model="formData.num_credit_lines" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm py-2 px-3 border">
+                                    </div>
+                                    <div>
+                                        <label for="credit_history_length" class="block text-sm font-medium text-gray-700">Credit History Length (Years)</label>
+                                        <input type="number" name="credit_history_length" id="credit_history_length" min="0" step="0.5" x-model="formData.credit_history_length" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm py-2 px-3 border">
+                                    </div>
+                                    <div>
+                                        <label for="late_payments" class="block text-sm font-medium text-gray-700">Number of Late Payments (Past 2 yrs)</label>
+                                        <input type="number" name="late_payments" id="late_payments" min="0" x-model="formData.late_payments" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm py-2 px-3 border">
+                                    </div>
+                                    <div>
+                                        <label for="bankruptcies" class="block text-sm font-medium text-gray-700">Number of Bankruptcies</label>
+                                        <input type="number" name="bankruptcies" id="bankruptcies" min="0" x-model="formData.bankruptcies" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm py-2 px-3 border">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-8 flex justify-between">
+                                <button type="button" @click="prevStep()" class="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-md font-medium hover:bg-gray-50 transition-colors">Previous</button>
+                                <button type="button" @click="if(formData.annual_income !== '' && formData.existing_debt !== '' && formData.num_credit_lines !== '' && formData.credit_history_length !== '') nextStep()" class="bg-primary text-white px-4 py-2 rounded-md font-medium hover:bg-blue-900 transition-colors">Next Step</button>
+                            </div>
+                        </div>
+
+                        <!-- STEP 3 -->
+                        <div x-show="step === 3" x-transition.opacity style="display: none;">
+                            <h2 class="text-xl font-bold text-gray-900 mb-6">Loan Details</h2>
+                            <div class="space-y-6">
+                                <div>
+                                    <div class="flex justify-between items-center">
+                                        <label for="loan_amount" class="block text-sm font-medium text-gray-700">Loan Amount (₹)</label>
+                                        <span class="text-lg font-bold text-primary" x-text="new Intl.NumberFormat('en-IN', { maximumSignificantDigits: 3 }).format(formData.loan_amount)"></span>
+                                    </div>
+                                    <input type="range" min="5000" max="5000000" step="5000" x-model="formData.loan_amount" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-4">
+                                    <input type="number" name="loan_amount" id="loan_amount" x-model="formData.loan_amount" required class="mt-4 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm py-2 px-3 border">
+                                </div>
+                                <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                    <div>
+                                        <label for="loan_purpose" class="block text-sm font-medium text-gray-700">Loan Purpose</label>
+                                        <select name="loan_purpose" id="loan_purpose" x-model="formData.loan_purpose" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm py-2 px-3 border bg-white">
+                                            <option value="personal">Personal</option>
+                                            <option value="home">Home</option>
+                                            <option value="car">Car/Auto</option>
+                                            <option value="education">Education</option>
+                                            <option value="business">Business</option>
+                                            <option value="medical">Medical</option>
+                                            <option value="debt_consolidation">Debt Consolidation</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label for="loan_tenure" class="block text-sm font-medium text-gray-700">Loan Tenure (Months)</label>
+                                        <select name="loan_tenure" id="loan_tenure" x-model="formData.loan_tenure" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm py-2 px-3 border bg-white">
+                                            <option value="12">12 Months (1 Year)</option>
+                                            <option value="24">24 Months (2 Years)</option>
+                                            <option value="36">36 Months (3 Years)</option>
+                                            <option value="48">48 Months (4 Years)</option>
+                                            <option value="60">60 Months (5 Years)</option>
+                                            <option value="120">120 Months (10 Years)</option>
+                                            <option value="180">180 Months (15 Years)</option>
+                                            <option value="240">240 Months (20 Years)</option>
+                                            <option value="360">360 Months (30 Years)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-8 flex justify-between">
+                                <button type="button" @click="prevStep()" class="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-md font-medium hover:bg-gray-50 transition-colors">Previous</button>
+                                <button type="button" @click="if(formData.loan_amount) nextStep()" class="bg-primary text-white px-4 py-2 rounded-md font-medium hover:bg-blue-900 transition-colors">Review Application</button>
+                            </div>
+                        </div>
+
+                        <!-- STEP 4 -->
+                        <div x-show="step === 4" x-transition.opacity style="display: none;">
+                            <h2 class="text-xl font-bold text-gray-900 mb-6">Review & Submit</h2>
+                            
+                            <div class="bg-gray-50 rounded-lg p-6 mb-6">
+                                <div class="flex justify-between items-center mb-4 border-b border-gray-200 pb-2">
+                                    <h3 class="text-lg font-medium text-gray-900">Personal & Financial summary</h3>
+                                    <button type="button" @click="step = 1; window.scrollTo(0,0);" class="text-sm text-accent hover:text-primary">Edit</button>
+                                </div>
+                                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                                    <div class="sm:col-span-1">
+                                        <dt class="text-sm font-medium text-gray-500">Employment</dt>
+                                        <dd class="mt-1 text-sm text-gray-900 capitalize" x-text="formData.employment_type + ' (' + formData.employment_length + ' years)'"></dd>
+                                    </div>
+                                    <div class="sm:col-span-1">
+                                        <dt class="text-sm font-medium text-gray-500">Income</dt>
+                                        <dd class="mt-1 text-sm text-gray-900" x-text="'₹' + formData.annual_income"></dd>
+                                    </div>
+                                    <div class="sm:col-span-1">
+                                        <dt class="text-sm font-medium text-gray-500">Existing Debt</dt>
+                                        <dd class="mt-1 text-sm text-gray-900" x-text="'₹' + formData.existing_debt"></dd>
+                                    </div>
+                                    <div class="sm:col-span-1">
+                                        <dt class="text-sm font-medium text-gray-500">Credit Lines</dt>
+                                        <dd class="mt-1 text-sm text-gray-900" x-text="formData.num_credit_lines"></dd>
+                                    </div>
+                                </dl>
+                            </div>
+
+                            <div class="bg-gray-50 rounded-lg p-6 mb-8">
+                                <div class="flex justify-between items-center mb-4 border-b border-gray-200 pb-2">
+                                    <h3 class="text-lg font-medium text-gray-900">Loan Request</h3>
+                                    <button type="button" @click="step = 3; window.scrollTo(0,0);" class="text-sm text-accent hover:text-primary">Edit</button>
+                                </div>
+                                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                                    <div class="sm:col-span-1">
+                                        <dt class="text-sm font-medium text-gray-500">Amount Requested</dt>
+                                        <dd class="mt-1 text-lg font-semibold text-gray-900" x-text="'₹' + new Intl.NumberFormat('en-IN').format(formData.loan_amount)"></dd>
+                                    </div>
+                                    <div class="sm:col-span-1">
+                                        <dt class="text-sm font-medium text-gray-500">Purpose</dt>
+                                        <dd class="mt-1 text-sm text-gray-900 capitalize" x-text="formData.loan_purpose.replace('_', ' ')"></dd>
+                                    </div>
+                                    <div class="sm:col-span-1">
+                                        <dt class="text-sm font-medium text-gray-500">Tenure</dt>
+                                        <dd class="mt-1 text-sm text-gray-900" x-text="formData.loan_tenure + ' months'"></dd>
+                                    </div>
+                                </dl>
+                            </div>
+
+                            <div class="mt-8 flex justify-between">
+                                <button type="button" @click="prevStep()" class="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-md font-medium hover:bg-gray-50 transition-colors">Previous</button>
+                                <button type="submit" class="bg-success text-white px-8 py-2 rounded-md font-bold hover:bg-emerald-700 transition-colors shadow-lg transform hover:-translate-y-0.5">Submit Application</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Recommendations - Credit Risk AI{% endblock %}
+
+{% block content %}
+<div class="flex h-screen bg-gray-50 overflow-hidden" x-data="{ sidebarOpen: false }">
+    <!-- Mobile sidebar backdrop -->
+    <div x-show="sidebarOpen" class="fixed inset-0 z-20 bg-black bg-opacity-50 transition-opacity lg:hidden" @click="sidebarOpen = false"></div>
+
+    <!-- SIDEBAR -->
+    <div :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'" class="fixed inset-y-0 left-0 z-30 w-64 bg-gray-900 overflow-y-auto transition duration-300 transform lg:translate-x-0 lg:static lg:inset-auto flex flex-col">
+        <div class="flex items-center justify-center mt-8">
+            <a href="/" class="flex items-center hover:opacity-80 transition-opacity">
+                <span class="text-white text-2xl font-semibold">🏦 Credit Risk AI</span>
+            </a>
+        </div>
+        <nav class="mt-10 flex-1 px-2 space-y-2">
+            <a href="/dashboard" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">📊</span> Dashboard
+            </a>
+            <a href="/dashboard/apply" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">📝</span> Apply for Loan
+            </a>
+            <a href="/dashboard/history" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">🕒</span> Application History
+            </a>
+        </nav>
+        <div class="p-4 border-t border-gray-800">
+            <div class="flex items-center mb-4">
+                <div class="flex-shrink-0">
+                    <div class="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white font-bold">{{ user.full_name[0]|upper if user else 'U' }}</div>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium text-white">{{ user.full_name if user else 'User' }}</p>
+                    <p class="text-xs text-gray-400">{{ user.email if user else 'user@example.com' }}</p>
+                </div>
+            </div>
+            <form action="/api/auth/logout" method="POST">
+                <button type="submit" class="w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors">
+                    Logout
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+        <header class="bg-white shadow-sm z-10">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="relative flex justify-between pt-4 pb-2">
+                    <div class="flex items-center">
+                        <button @click="sidebarOpen = true" class="-ml-2 mx-2 p-2 rounded-md text-gray-400 hover:text-gray-500 lg:hidden">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                        </button>
+                        <a href="/dashboard/report/{{ application.id }}" class="text-gray-500 hover:text-gray-700 mr-4">
+                            &larr; Back to Report
+                        </a>
+                        <h1 class="text-xl font-semibold text-gray-900">Personalized Recommendations</h1>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-6 lg:p-8">
+            <div class="max-w-7xl mx-auto">
+                
+                <!-- Summary Card -->
+                <div class="bg-white rounded-lg shadow-sm p-4 mb-8 flex justify-between items-center border-l-4
+                    {% if assessment.risk_category == 'low' %}border-green-500
+                    {% elif assessment.risk_category == 'medium' %}border-yellow-500
+                    {% else %}border-red-500{% endif %}">
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900">Credit Score: {{ assessment.credit_score }}</h2>
+                        <p class="text-sm text-gray-500 capitalize">{{ assessment.risk_category }} Risk Profile</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-medium text-gray-500">Requested Amount</p>
+                        <p class="text-xl font-bold text-gray-900">₹{{ application.loan_amount }}</p>
+                    </div>
+                </div>
+
+                <!-- Recommendations Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {% for rec in recommendations %}
+                    <div class="bg-white rounded-xl shadow-md overflow-hidden flex flex-col relative {% if rec.is_recommended %}ring-2 ring-primary transform md:-translate-y-1 transition-transform{% endif %}">
+                        {% if rec.is_recommended %}
+                        <div class="absolute top-0 right-0 bg-primary text-white text-xs font-bold px-3 py-1 rounded-bl-lg z-10">
+                            ★ Top Match
+                        </div>
+                        {% endif %}
+                        
+                        <div class="p-6 flex-1">
+                            <div class="flex justify-between items-start mb-4">
+                                <h3 class="text-xl font-bold text-gray-900">{{ rec.name }}</h3>
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    {{ rec.match_score }}% Match
+                                </span>
+                            </div>
+                            
+                            <p class="text-sm text-gray-500 mb-6">{{ rec.description }}</p>
+                            
+                            <div class="bg-gray-50 rounded-lg p-4 mb-6 text-center border {% if rec.is_recommended %}border-blue-200 bg-blue-50{% else %}border-gray-200{% endif %}">
+                                <div class="text-sm text-gray-500 mb-1">Estimated Interest Rate</div>
+                                <div class="text-3xl font-extrabold {% if rec.is_recommended %}text-primary{% else %}text-gray-900{% endif %}">{{ rec.estimated_rate }}% <span class="text-lg font-medium text-gray-500">p.a.</span></div>
+                            </div>
+
+                            <div class="space-y-3 mb-6">
+                                <div class="flex justify-between text-sm">
+                                    <span class="text-gray-500">Rate Range:</span>
+                                    <span class="font-medium text-gray-900">{{ rec.rate_range }}</span>
+                                </div>
+                                <div class="flex justify-between text-sm">
+                                    <span class="text-gray-500">Max Eligible Amount:</span>
+                                    <span class="font-medium text-gray-900">₹{{ rec.eligible_amount }}</span>
+                                </div>
+                            </div>
+
+                            <!-- EMI Options -->
+                            <h4 class="text-sm font-semibold text-gray-900 mb-2 border-b pb-1">EMI Options</h4>
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="text-gray-500 text-left">
+                                        <th class="font-normal pb-2">Tenure</th>
+                                        <th class="font-normal pb-2 text-right">Est. EMI</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for emi in rec.emi_options %}
+                                    <tr>
+                                        <td class="py-1 border-b border-gray-100">{{ emi.months }} months</td>
+                                        <td class="py-1 border-b border-gray-100 text-right font-medium text-gray-900">₹{{ emi.amount }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="bg-gray-50 p-4 border-t border-gray-100">
+                            <button class="w-full bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded font-medium transition-colors">Select Product</button>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="col-span-full bg-white rounded-lg p-12 text-center shadow">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <h3 class="mt-2 text-sm font-medium text-gray-900">No recommendations available</h3>
+                        <p class="mt-1 text-sm text-gray-500">Your risk profile currently limits available standard loan products.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <p class="text-xs text-gray-400 text-center mt-8">Note: Estimated rates and EMIs are indicative and subject to final credit appraisal by the lender.</p>
+
+            </div>
+        </main>
+    </div>
+</div>
+{% endblock %}

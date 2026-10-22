@@ -1,0 +1,466 @@
+{% extends "base.html" %}
+
+{% block title %}Risk Assessment Report - Credit Risk AI{% endblock %}
+
+{% block content %}
+<div class="flex h-screen bg-gray-50 overflow-hidden" x-data="{ sidebarOpen: false }">
+    <!-- Mobile sidebar backdrop -->
+    <div x-show="sidebarOpen" class="fixed inset-0 z-20 bg-black bg-opacity-50 transition-opacity lg:hidden" @click="sidebarOpen = false"></div>
+
+    <!-- SIDEBAR -->
+    <div :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'" class="fixed inset-y-0 left-0 z-30 w-64 bg-gray-900 overflow-y-auto transition duration-300 transform lg:translate-x-0 lg:static lg:inset-auto flex flex-col">
+        <div class="flex items-center justify-center mt-8">
+            <a href="/" class="flex items-center hover:opacity-80 transition-opacity">
+                <span class="text-white text-2xl font-semibold">🏦 Credit Risk AI</span>
+            </a>
+        </div>
+        <nav class="mt-10 flex-1 px-2 space-y-2">
+            <a href="/dashboard" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">📊</span> Dashboard
+            </a>
+            <a href="/dashboard/apply" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">📝</span> Apply for Loan
+            </a>
+            <a href="/dashboard/history" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">🕒</span> Application History
+            </a>
+            {% if user and user.is_admin %}
+            <a href="/admin" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">⚙️</span> Admin Panel
+            </a>
+            {% endif %}
+        </nav>
+        <div class="p-4 border-t border-gray-800">
+            <div class="flex items-center mb-4">
+                <div class="flex-shrink-0">
+                    <div class="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white font-bold">{{ user.full_name[0]|upper if user else 'U' }}</div>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium text-white">{{ user.full_name if user else 'User' }}</p>
+                    <p class="text-xs text-gray-400">{{ user.email if user else 'user@example.com' }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+        <header class="bg-white shadow-sm z-10 print:hidden">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="relative flex justify-between pt-4 pb-2">
+                    <div class="flex items-center">
+                        <button @click="sidebarOpen = true" class="-ml-2 mx-2 p-2 rounded-md text-gray-400 hover:text-gray-500 lg:hidden">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                        </button>
+                        <a href="/dashboard/history" class="text-gray-500 hover:text-gray-700 mr-4">
+                            &larr; Back
+                        </a>
+                        <h1 class="text-xl font-semibold text-gray-900">Risk Assessment Report</h1>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <button onclick="window.print()" class="text-gray-500 hover:text-primary transition-colors" title="Print Report">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-6 lg:p-8">
+            <div class="max-w-6xl mx-auto space-y-8">
+                
+                <!-- Print Header -->
+                <div class="hidden print:block text-center mb-8 border-b pb-4">
+                    <h1 class="text-3xl font-bold">Credit Risk AI Report</h1>
+                    <p class="text-gray-500">Application ID: {{ application.id }} | Date: {{ application.created_at.strftime('%Y-%m-%d') }}</p>
+                </div>
+
+                <!-- Score Overview -->
+                <div class="bg-white rounded-xl shadow-md p-6 lg:p-8">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                        <!-- Score Gauge -->
+                        <div class="flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-gray-100 pb-8 md:pb-0">
+                            <div class="relative w-64 h-64">
+                                <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                                    <circle cx="50" cy="50" r="45" fill="none" stroke="#e5e7eb" stroke-width="10"></circle>
+                                    <circle id="score-gauge" cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="10" stroke-dasharray="282.7" stroke-dashoffset="282.7" stroke-linecap="round" class="transition-all duration-1500 ease-out 
+                                        {% if assessment.credit_score >= 700 %}text-green-500
+                                        {% elif assessment.credit_score >= 600 %}text-yellow-500
+                                        {% elif assessment.credit_score >= 500 %}text-orange-500
+                                        {% else %}text-red-500{% endif %}"></circle>
+                                </svg>
+                                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span class="text-5xl font-extrabold text-gray-900" id="score-text">0</span>
+                                    <span class="text-sm font-medium text-gray-500 mt-1">out of 850</span>
+                                </div>
+                            </div>
+                            <div class="mt-4 px-6 py-2 rounded-full font-bold text-lg capitalize border-2
+                                {% if assessment.risk_category == 'low' %}text-green-700 bg-green-50 border-green-200
+                                {% elif assessment.risk_category == 'medium' %}text-yellow-700 bg-yellow-50 border-yellow-200
+                                {% elif assessment.risk_category == 'high' %}text-orange-700 bg-orange-50 border-orange-200
+                                {% else %}text-red-700 bg-red-50 border-red-200{% endif %}">
+                                {{ assessment.risk_category }} Risk
+                            </div>
+                        </div>
+
+                        <!-- Metrics Cards -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <div class="text-sm text-gray-500 mb-1">Default Probability</div>
+                                <div class="text-2xl font-bold {% if assessment.probability_of_default < 0.1 %}text-green-600{% elif assessment.probability_of_default < 0.3 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                                    {{ (assessment.probability_of_default * 100)|round(1) }}%
+                                </div>
+                            </div>
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <div class="text-sm text-gray-500 mb-1">Application Status</div>
+                                <div class="text-xl font-bold capitalize
+                                    {% if application.status == 'approved' %}text-green-600
+                                    {% elif application.status == 'rejected' %}text-red-600
+                                    {% else %}text-yellow-600{% endif %}">
+                                    {{ application.status }}
+                                </div>
+                            </div>
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <div class="text-sm text-gray-500 mb-1">Loan Request</div>
+                                <div class="text-xl font-bold text-gray-900">₹{{ application.loan_amount|int }}</div>
+                                <div class="text-xs text-gray-500 capitalize">{{ application.loan_purpose }}</div>
+                            </div>
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <div class="text-sm text-gray-500 mb-1">Tenure</div>
+                                <div class="text-xl font-bold text-gray-900">{{ application.loan_tenure }} Months</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Explanation (SHAP) -->
+                <div class="bg-white rounded-xl shadow-md p-6 lg:p-8">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-bold text-gray-900">What Influenced Your Score?</h2>
+                        <div class="relative group cursor-pointer text-gray-400 hover:text-primary">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <div class="absolute right-0 w-64 p-3 mt-2 bg-gray-900 text-white text-sm rounded shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20">
+                                This chart uses SHAP (SHapley Additive exPlanations) to show exactly how much each factor increased or decreased your score from the average baseline.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="w-full h-80 relative">
+                        <canvas id="shapChart"></canvas>
+                    </div>
+
+                    <!-- Factors Lists -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10 border-t pt-8">
+                        <div>
+                            <h3 class="text-lg font-semibold text-red-700 flex items-center mb-4">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                                Risk Factors (Lowered Score)
+                            </h3>
+                            <ul class="space-y-3">
+                                {% for factor in risk_factors %}
+                                <li class="flex items-start">
+                                    <svg class="w-4 h-4 text-red-500 mt-1 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+                                    <span class="text-gray-700 text-sm">{{ factor }}</span>
+                                </li>
+                                {% else %}
+                                <li class="text-sm text-gray-500 italic">No major risk factors identified.</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-green-700 flex items-center mb-4">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                Protective Factors (Improved Score)
+                            </h3>
+                            <ul class="space-y-3">
+                                {% for factor in protective_factors %}
+                                <li class="flex items-start">
+                                    <svg class="w-4 h-4 text-green-500 mt-1 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
+                                    <span class="text-gray-700 text-sm">{{ factor }}</span>
+                                </li>
+                                {% else %}
+                                <li class="text-sm text-gray-500 italic">No major protective factors identified.</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detailed Breakdown Table -->
+                <div class="bg-white rounded-xl shadow-md overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h2 class="text-lg font-bold text-gray-900">Detailed Feature Contributions</h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Feature</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Your Value</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Impact on Score</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Direction</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                {% for item in feature_contributions %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 capitalize">{{ item.human_name if item.human_name else item.feature|replace('_', ' ') }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ "%.2f"|format(item.value) if item.value is number else item.value }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                        <span class="font-semibold {% if item.shap < 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                                            {{ "%+.4f"|format(item.shap) }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                        {% if item.direction == 'decreases' %}
+                                        <span class="inline-flex items-center text-green-600"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg> Lower Risk</span>
+                                        {% else %}
+                                        <span class="inline-flex items-center text-red-600"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg> Higher Risk</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- What-If Analysis -->
+                <div class="bg-white rounded-xl shadow-md p-6 lg:p-8" x-data="whatIfAnalysis()">
+                    <h2 class="text-xl font-bold text-gray-900 mb-2">What-If Analysis</h2>
+                    <p class="text-gray-500 text-sm mb-6">Explore how changing your financial situation could affect your credit score.</p>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div class="lg:col-span-2 space-y-4 border-r pr-0 lg:pr-8 border-gray-100">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Annual Income (₹)</label>
+                                <div class="flex items-center mt-1">
+                                    <input type="range" min="10000" max="5000000" step="10000" x-model="simIncome" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mr-4">
+                                    <input type="number" x-model="simIncome" class="w-32 border-gray-300 rounded-md shadow-sm sm:text-sm py-1 px-2 border">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Existing Debt (₹)</label>
+                                <div class="flex items-center mt-1">
+                                    <input type="range" min="0" max="2000000" step="5000" x-model="simDebt" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mr-4">
+                                    <input type="number" x-model="simDebt" class="w-32 border-gray-300 rounded-md shadow-sm sm:text-sm py-1 px-2 border">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Late Payments</label>
+                                <div class="flex items-center mt-1">
+                                    <input type="range" min="0" max="10" step="1" x-model="simLate" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mr-4">
+                                    <input type="number" x-model="simLate" class="w-32 border-gray-300 rounded-md shadow-sm sm:text-sm py-1 px-2 border">
+                                </div>
+                            </div>
+                            
+                            <div class="pt-4">
+                                <button @click="analyze()" :disabled="loading" class="w-full sm:w-auto bg-primary text-white px-6 py-2 rounded-md font-medium hover:bg-blue-900 transition-colors flex items-center justify-center">
+                                    <span x-show="!loading">Analyze Scenario</span>
+                                    <svg x-show="loading" style="display:none;" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- What-if Results -->
+                        <div class="bg-gray-50 rounded-lg p-6 flex flex-col justify-center items-center text-center">
+                            <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wider mb-2">Simulated Score</h3>
+                            <div x-show="!hasSimulated" class="text-gray-400 italic text-sm">Adjust sliders and click analyze to see projected impact.</div>
+                            
+                            <div x-show="hasSimulated" style="display:none;" class="w-full">
+                                <div class="text-5xl font-extrabold text-gray-900 mb-2" x-text="resultScore"></div>
+                                <div class="text-lg font-bold capitalize mb-4" :class="riskColorClass" x-text="resultRisk + ' Risk'"></div>
+                                
+                                <div class="border-t border-gray-200 pt-4 flex justify-between items-center text-sm">
+                                    <span class="text-gray-600">Score Change:</span>
+                                    <span class="font-bold flex items-center" :class="diffClass">
+                                        <svg x-show="resultDiff > 0" class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
+                                        <svg x-show="resultDiff < 0" class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+                                        <span x-text="(resultDiff > 0 ? '+' : '') + resultDiff"></span> pts
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Improvement Tips -->
+                <div class="bg-blue-50 border border-blue-100 rounded-xl shadow-sm p-6 lg:p-8">
+                    <h2 class="text-xl font-bold text-blue-900 mb-4 flex items-center">
+                        <svg class="w-6 h-6 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        How to Improve Your Score
+                    </h2>
+                    <ul class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {% for tip in improvement_tips %}
+                        <li class="bg-white rounded p-4 shadow-sm text-sm text-gray-700 flex">
+                            <span class="text-accent mr-2">💡</span> {{ tip }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <!-- Action Buttons (Bottom) -->
+                <div class="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4 pt-4 pb-12 print:hidden">
+                    <a href="/dashboard/recommendations/{{ application.id }}" class="bg-primary hover:bg-blue-900 text-white font-bold py-3 px-8 rounded-lg shadow-lg text-center transition-transform transform hover:-translate-y-1">
+                        View Loan Recommendations
+                    </a>
+                    <a href="/dashboard/apply" class="bg-white border-2 border-primary text-primary hover:bg-gray-50 font-bold py-3 px-8 rounded-lg shadow text-center transition-colors">
+                        Apply Again
+                    </a>
+                </div>
+
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+    const shapData = {{ shap_data|tojson }};
+    const originalScore = {{ assessment.credit_score }};
+    const appId = {{ application.id }};
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Animate Score Gauge
+    setTimeout(() => {
+        const gauge = document.getElementById('score-gauge');
+        const scoreText = document.getElementById('score-text');
+        const score = originalScore;
+        const maxScore = 850;
+        const minScore = 300;
+        
+        // Calculate offset (282.7 is full circumference)
+        const range = maxScore - minScore;
+        const percentage = Math.max(0, Math.min(1, (score - minScore) / range));
+        const offset = 282.7 - (282.7 * percentage);
+        
+        gauge.style.strokeDashoffset = offset;
+        
+        // Counter animation
+        let current = 300;
+        const increment = (score - 300) / 30; // 30 steps
+        const timer = setInterval(() => {
+            current += increment;
+            if(current >= score) {
+                current = score;
+                clearInterval(timer);
+            }
+            scoreText.textContent = Math.round(current);
+        }, 30);
+    }, 100);
+
+    // SHAP Waterfall Chart using Chart.js
+    const ctx = document.getElementById('shapChart').getContext('2d');
+    
+    // Sort SHAP values by absolute magnitude for better display
+    const sortedFeatures = Object.keys(shapData).sort((a, b) => Math.abs(shapData[b]) - Math.abs(shapData[a])).slice(0, 8); // Top 8
+    
+    const labels = sortedFeatures.map(f => f.replace(/_/g, ' ').toUpperCase());
+    const data = sortedFeatures.map(f => shapData[f]);
+    const colors = data.map(v => v < 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)'); // Green for negative (lowers risk), Red for positive (raises risk)
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Impact on Risk Score',
+                data: data,
+                backgroundColor: colors,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let val = context.raw;
+                            return (val > 0 ? '+ risk' : '- risk') + ' (' + val.toFixed(3) + ')';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { drawBorder: false, color: '#f3f4f6' },
+                    title: { display: true, text: 'SHAP Value (Impact on Default Probability)' }
+                },
+                y: {
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+
+    // Alpine.js logic for What-If Analysis
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('whatIfAnalysis', () => ({
+            simIncome: {{ application.annual_income }},
+            simDebt: {{ application.existing_debt }},
+            simLate: {{ application.late_payments }},
+            loading: false,
+            hasSimulated: false,
+            resultScore: 0,
+            resultRisk: '',
+            resultDiff: 0,
+            
+            get riskColorClass() {
+                if(this.resultRisk === 'low') return 'text-green-600';
+                if(this.resultRisk === 'medium') return 'text-yellow-600';
+                if(this.resultRisk === 'high') return 'text-orange-600';
+                return 'text-red-600';
+            },
+            
+            get diffClass() {
+                if(this.resultDiff > 0) return 'text-green-600';
+                if(this.resultDiff < 0) return 'text-red-600';
+                return 'text-gray-500';
+            },
+            
+            async analyze() {
+                this.loading = true;
+                try {
+                    const response = await fetch('/api/assessments/whatif', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            age: {{ application.age }},
+                            annual_income: parseFloat(this.simIncome),
+                            employment_length: {{ application.employment_length }},
+                            employment_type: '{{ application.employment_type }}',
+                            home_ownership: '{{ application.home_ownership }}',
+                            existing_debt: parseFloat(this.simDebt),
+                            num_credit_lines: {{ application.num_credit_lines }},
+                            credit_history_length: {{ application.credit_history_length }},
+                            late_payments: parseInt(this.simLate),
+                            bankruptcies: {{ application.bankruptcies }},
+                            loan_amount: {{ application.loan_amount }},
+                            loan_purpose: '{{ application.loan_purpose }}',
+                            loan_tenure: {{ application.loan_tenure }}
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.resultScore = data.credit_score;
+                        this.resultRisk = data.risk_category;
+                        this.resultDiff = data.credit_score - originalScore;
+                        this.hasSimulated = true;
+                    }
+                } catch (error) {
+                    console.error('Simulation failed', error);
+                } finally {
+                    this.loading = false;
+                }
+            }
+        }));
+    });
+</script>
+{% endblock %}

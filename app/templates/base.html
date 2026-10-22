@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Credit Risk AI{% endblock %}</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1e40af', 
+                        accent: '#3b82f6', 
+                        success: '#059669', 
+                        warning: '#d97706', 
+                        danger: '#dc2626', 
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans antialiased min-h-screen flex flex-col">
+    <!-- Flash Messages -->
+    {% if messages %}
+    <div class="fixed top-4 right-4 z-50 flex flex-col gap-2">
+        {% for category, message in messages %}
+        <div class="p-4 rounded shadow-md text-white
+            {% if category == 'error' %}bg-danger
+            {% elif category == 'success' %}bg-success
+            {% else %}bg-primary{% endif %}"
+            x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 5000)">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+
+    <script src="/static/js/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Credit Risk AI{% endblock %}
+
+{% block content %}
+<div class="flex h-screen bg-gray-50 overflow-hidden" x-data="{ sidebarOpen: false }">
+    <!-- Mobile sidebar backdrop -->
+    <div x-show="sidebarOpen" class="fixed inset-0 z-20 bg-black bg-opacity-50 transition-opacity lg:hidden" @click="sidebarOpen = false"></div>
+
+    <!-- SIDEBAR -->
+    <div :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'" class="fixed inset-y-0 left-0 z-30 w-64 bg-gray-900 overflow-y-auto transition duration-300 transform lg:translate-x-0 lg:static lg:inset-auto flex flex-col">
+        <div class="flex items-center justify-center mt-8">
+            <a href="/" class="flex items-center hover:opacity-80 transition-opacity">
+                <span class="text-white text-2xl font-semibold">🏦 Credit Risk AI</span>
+            </a>
+        </div>
+        <nav class="mt-10 flex-1 px-2 space-y-2">
+            <a href="/dashboard" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">⬅️</span> Back to User View
+            </a>
+            <div class="border-t border-gray-800 my-2"></div>
+            <a href="/admin" class="flex items-center px-4 py-3 bg-gray-800 text-white rounded-md">
+                <span class="mr-3">⚙️</span> Admin Overview
+            </a>
+        </nav>
+        <div class="p-4 border-t border-gray-800">
+            <div class="flex items-center mb-4">
+                <div class="flex-shrink-0">
+                    <div class="h-8 w-8 rounded-full bg-red-600 flex items-center justify-center text-white font-bold">A</div>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium text-white">Administrator</p>
+                    <p class="text-xs text-gray-400">{{ user.email }}</p>
+                </div>
+            </div>
+            <form action="/api/auth/logout" method="POST">
+                <button type="submit" class="w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-700 hover:bg-gray-600 transition-colors">
+                    Logout
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+        <header class="bg-white shadow-sm lg:static lg:overflow-y-visible z-10">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="relative flex justify-between xl:grid xl:grid-cols-12 lg:gap-8 pb-2 pt-4">
+                    <div class="flex md:absolute md:left-0 md:inset-y-0 lg:static xl:col-span-2">
+                        <button @click="sidebarOpen = true" class="-ml-2 mx-2 p-2 rounded-md text-gray-400 hover:text-gray-500 lg:hidden">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                        </button>
+                        <h1 class="text-2xl font-semibold text-gray-900 hidden lg:block">Admin Panel</h1>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-6 lg:p-8" x-data="adminDashboard()">
+            <div class="max-w-7xl mx-auto space-y-6">
+                
+                <!-- Loading State -->
+                <div x-show="loading" class="flex justify-center items-center py-12">
+                    <svg class="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                </div>
+
+                <div x-show="!loading" style="display: none;">
+                    <!-- KPI Cards -->
+                    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+                        <div class="bg-white overflow-hidden shadow rounded-lg">
+                            <div class="p-5">
+                                <div class="flex items-center">
+                                    <div class="flex-shrink-0 bg-blue-100 rounded-md p-3">
+                                        <span class="text-xl">👥</span>
+                                    </div>
+                                    <div class="ml-5 w-0 flex-1">
+                                        <dt class="text-sm font-medium text-gray-500 truncate">Total Users</dt>
+                                        <dd class="text-2xl font-semibold text-gray-900" x-text="stats.total_users"></dd>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white overflow-hidden shadow rounded-lg">
+                            <div class="p-5">
+                                <div class="flex items-center">
+                                    <div class="flex-shrink-0 bg-purple-100 rounded-md p-3">
+                                        <span class="text-xl">📄</span>
+                                    </div>
+                                    <div class="ml-5 w-0 flex-1">
+                                        <dt class="text-sm font-medium text-gray-500 truncate">Total Applications</dt>
+                                        <dd class="text-2xl font-semibold text-gray-900" x-text="stats.total_applications"></dd>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white overflow-hidden shadow rounded-lg">
+                            <div class="p-5">
+                                <div class="flex items-center">
+                                    <div class="flex-shrink-0 bg-yellow-100 rounded-md p-3">
+                                        <span class="text-xl">📊</span>
+                                    </div>
+                                    <div class="ml-5 w-0 flex-1">
+                                        <dt class="text-sm font-medium text-gray-500 truncate">Avg Credit Score</dt>
+                                        <dd class="text-2xl font-semibold text-gray-900" x-text="stats.average_score"></dd>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white overflow-hidden shadow rounded-lg">
+                            <div class="p-5">
+                                <div class="flex items-center">
+                                    <div class="flex-shrink-0 bg-green-100 rounded-md p-3">
+                                        <span class="text-xl">✅</span>
+                                    </div>
+                                    <div class="ml-5 w-0 flex-1">
+                                        <dt class="text-sm font-medium text-gray-500 truncate">Approval Rate</dt>
+                                        <dd class="text-2xl font-semibold text-gray-900" x-text="(stats.approval_rate * 100).toFixed(1) + '%'"></dd>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts Row -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                        <div class="bg-white shadow rounded-lg p-6">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">Risk Distribution</h3>
+                            <div class="relative h-64 w-full flex justify-center">
+                                <canvas id="riskChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-white shadow rounded-lg p-6">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">Application Trends (Last 7 Days)</h3>
+                            <div class="relative h-64 w-full">
+                                <canvas id="trendChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Applications Table -->
+                    <h2 class="text-lg leading-6 font-medium text-gray-900 mb-4">Recent Applications (Pending Review)</h2>
+                    <div class="bg-white shadow rounded-lg overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID / User</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Risk</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <template x-for="app in recentApplications" :key="app.id">
+                                        <tr>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <div class="text-sm font-medium text-gray-900" x-text="'App #' + app.id"></div>
+                                                <div class="text-sm text-gray-500" x-text="'User ID: ' + app.user_id"></div>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="'₹' + app.amount"></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="app.score"></td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full capitalize"
+                                                    :class="{
+                                                        'bg-green-100 text-green-800': app.risk === 'low',
+                                                        'bg-yellow-100 text-yellow-800': app.risk === 'medium',
+                                                        'bg-orange-100 text-orange-800': app.risk === 'high',
+                                                        'bg-red-100 text-red-800': app.risk === 'very_high'
+                                                    }" x-text="app.risk.replace('_', ' ')">
+                                                </span>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Pending</span>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                                                <div class="flex justify-center space-x-2">
+                                                    <button @click="updateStatus(app.id, 'approved')" class="text-green-600 hover:text-green-900 bg-green-50 px-2 py-1 rounded">Approve</button>
+                                                    <button @click="updateStatus(app.id, 'rejected')" class="text-red-600 hover:text-red-900 bg-red-50 px-2 py-1 rounded">Reject</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <tr x-show="recentApplications.length === 0">
+                                        <td colspan="6" class="px-6 py-12 text-center text-gray-500">No pending applications found.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('adminDashboard', () => ({
+            loading: true,
+            stats: {
+                total_users: 0,
+                total_applications: 0,
+                average_score: 0,
+                approval_rate: 0
+            },
+            recentApplications: [],
+            
+            init() {
+                this.fetchData();
+            },
+            
+            async fetchData() {
+                try {
+                    const response = await fetch('/api/admin/stats');
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.stats = data.stats;
+                        this.recentApplications = data.recent_applications || [];
+                        this.renderCharts(data.distribution, data.trends);
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch admin stats', error);
+                } finally {
+                    this.loading = false;
+                }
+            },
+            
+            async updateStatus(appId, status) {
+                if(!confirm(`Are you sure you want to ${status} this application?`)) return;
+                
+                try {
+                    const response = await fetch(`/api/admin/applications/${appId}/status`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status })
+                    });
+                    
+                    if (response.ok) {
+                        // Remove from list
+                        this.recentApplications = this.recentApplications.filter(a => a.id !== appId);
+                        alert(`Application successfully ${status}`);
+                        this.fetchData(); // refresh stats
+                    } else {
+                        alert('Failed to update status');
+                    }
+                } catch (error) {
+                    console.error('Error updating status', error);
+                }
+            },
+            
+            renderCharts(distribution, trends) {
+                // Risk Distribution Chart
+                if(distribution) {
+                    const ctxRisk = document.getElementById('riskChart').getContext('2d');
+                    new Chart(ctxRisk, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Low', 'Medium', 'High', 'Very High'],
+                            datasets: [{
+                                data: [distribution.low || 0, distribution.medium || 0, distribution.high || 0, distribution.very_high || 0],
+                                backgroundColor: ['#10b981', '#f59e0b', '#f97316', '#ef4444'],
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'right' }
+                            }
+                        }
+                    });
+                }
+                
+                // Trend Chart
+                if(trends) {
+                    const ctxTrend = document.getElementById('trendChart').getContext('2d');
+                    new Chart(ctxTrend, {
+                        type: 'line',
+                        data: {
+                            labels: trends.labels || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                            datasets: [{
+                                label: 'Applications',
+                                data: trends.data || [0,0,0,0,0,0,0],
+                                borderColor: '#3b82f6',
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                tension: 0.4,
+                                fill: true
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                            }
+                        }
+                    });
+                }
+            }
+        }));
+    });
+</script>
+{% endblock %}

@@ -13,8 +13,8 @@ from app.routers import auth, applications, assessments, admin, pages
 
 def _seed_admin():
     """Create default admin user if it doesn't exist."""
-    db = SessionLocal()
     try:
+        db = SessionLocal()
         admin_user = db.query(User).filter(User.email == "admin@creditrisk.ai").first()
         if not admin_user:
             hashed_pw = get_password_hash("admin123")
@@ -26,15 +26,26 @@ def _seed_admin():
             )
             db.add(new_admin)
             db.commit()
-    finally:
         db.close()
+    except Exception as e:
+        print(f"Admin seeding notice: {e}")
+
+# Eager startup: execute immediately upon module load for serverless environments
+try:
+    init_db()
+    _seed_admin()
+except Exception as e:
+    print(f"Eager DB initialization notice: {e}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Run startup tasks before serving requests."""
-    init_db()
-    _seed_admin()
+    """Run startup tasks for long-running servers."""
+    try:
+        init_db()
+        _seed_admin()
+    except Exception as e:
+        print(f"Lifespan initialization error: {e}")
     yield
 
 
@@ -44,6 +55,21 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Exception handling middleware to log full traceback for serverless debugging
+@app.middleware("http")
+async def db_error_handling_middleware(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as exc:
+        import traceback
+        err_msg = traceback.format_exc()
+        print(f"SERVER ERROR ON {request.method} {request.url.path}:\n{err_msg}")
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(
+            f"<html><body style='font-family:sans-serif;padding:30px;'><h2>Internal Server Error</h2><p>An unexpected error occurred while processing your request:</p><pre style='background:#f8d7da;color:#721c24;padding:15px;border-radius:6px;overflow:auto;'>{err_msg}</pre><p><a href='/'>&larr; Return to Home</a></p></body></html>",
+            status_code=500
+        )
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 static_dir = os.path.join(base_dir, "static")

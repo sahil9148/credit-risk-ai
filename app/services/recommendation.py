@@ -1,3 +1,6 @@
+from __future__ import annotations
+from typing import List, Dict
+
 def get_loan_recommendations(credit_score: int, loan_amount: float, annual_income: float, loan_purpose: str) -> list[dict]:
     products = [
         {"name": "Premium Personal Loan", "min_score": 750, "rate_range": (8.5, 11.0), "max_amount": 2000000},

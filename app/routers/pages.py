@@ -163,3 +163,11 @@ async def admin_page(request: Request, current_user: User = Depends(get_admin_us
         "user": current_user,
         "current_user": current_user
     })
+
+
+@router.get("/dashboard/experiments", response_class=HTMLResponse)
+async def experiments_page(request: Request, current_user: User = Depends(get_current_user)):
+    return render(request, "dashboard/experiments.html", {
+        "user": current_user,
+        "current_user": current_user
+    })

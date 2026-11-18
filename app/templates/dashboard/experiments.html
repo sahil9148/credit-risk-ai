@@ -1,0 +1,1186 @@
+{% extends "base.html" %}
+
+{% block title %}ML Experiments - Credit Risk AI{% endblock %}
+
+{% block content %}
+<div class="flex h-screen bg-gray-50 overflow-hidden" x-data="experimentsPage()">
+    <!-- Mobile sidebar backdrop -->
+    <div x-show="sidebarOpen" class="fixed inset-0 z-20 bg-black bg-opacity-50 transition-opacity lg:hidden" @click="sidebarOpen = false"></div>
+
+    <!-- SIDEBAR -->
+    <div :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'" class="fixed inset-y-0 left-0 z-30 w-64 bg-gray-900 overflow-y-auto transition duration-300 transform lg:translate-x-0 lg:static lg:inset-auto flex flex-col">
+        <div class="flex items-center justify-center mt-8">
+            <a href="/" class="flex items-center hover:opacity-80 transition-opacity">
+                <span class="text-white text-2xl font-semibold">🏦 Credit Risk AI</span>
+            </a>
+        </div>
+        <nav class="mt-10 flex-1 px-2 space-y-2">
+            <a href="/dashboard" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">📊</span> Dashboard
+            </a>
+            <a href="/dashboard/apply" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">📝</span> Apply for Loan
+            </a>
+            <a href="/dashboard/history" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">🕒</span> Application History
+            </a>
+            <a href="/dashboard/experiments" class="flex items-center px-4 py-3 bg-gray-800 text-white rounded-md">
+                <span class="mr-3">🧪</span> ML Experiments
+            </a>
+            {% if user and user.is_admin %}
+            <a href="/admin" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors">
+                <span class="mr-3">⚙️</span> Admin Panel
+            </a>
+            {% endif %}
+        </nav>
+        <div class="p-4 border-t border-gray-800">
+            <div class="flex items-center mb-4">
+                <div class="flex-shrink-0">
+                    <div class="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white font-bold">{{ user.full_name[0]|upper if user else 'U' }}</div>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium text-white">{{ user.full_name if user else 'User' }}</p>
+                    <p class="text-xs text-gray-400">{{ user.email if user else 'user@example.com' }}</p>
+                </div>
+            </div>
+            <form action="/api/auth/logout" method="POST">
+                <button type="submit" class="w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors">
+                    Logout
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+        <main class="flex-1 overflow-y-auto">
+            <!-- Header -->
+            <div class="bg-white shadow-sm border-b border-gray-200">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <button @click="sidebarOpen = true" class="text-gray-500 hover:text-gray-700 lg:hidden mr-4">
+                                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                                </svg>
+                            </button>
+                            <h1 class="text-2xl font-bold text-gray-900">🧪 ML Experiments Dashboard</h1>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <!-- Run New Experiment -->
+                            <button @click="startExperiment()" :disabled="experimentRunning" class="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                                <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                <span x-text="experimentRunning ? 'Running...' : 'Run New Experiment'"></span>
+                            </button>
+                            <!-- Export Dropdown -->
+                            <div class="relative" x-data="{ exportOpen: false }">
+                                <button @click="exportOpen = !exportOpen" :disabled="!results" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                                    <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                    Export Results
+                                    <svg class="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                </button>
+                                <div x-show="exportOpen" @click.away="exportOpen = false" x-transition class="absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-10">
+                                    <a href="#" @click.prevent="exportJSON(); exportOpen = false" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-t-md">📄 Export JSON</a>
+                                    <a href="#" @click.prevent="exportCSV(); exportOpen = false" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-b-md">📊 Export CSV</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+                <!-- Loading Spinner -->
+                <div x-show="loading" class="flex items-center justify-center py-20">
+                    <div class="text-center">
+                        <svg class="animate-spin h-12 w-12 text-indigo-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p class="text-gray-500 text-lg">Loading experiment data...</p>
+                    </div>
+                </div>
+
+                <!-- Error Message -->
+                <div x-show="error" x-cloak class="bg-red-50 border-l-4 border-red-500 rounded-lg p-4">
+                    <div class="flex items-center">
+                        <svg class="w-6 h-6 text-red-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <div>
+                            <p class="text-red-800 font-semibold">Experiment Error</p>
+                            <p class="text-red-700 text-sm" x-text="error"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Experiment Running Indicator -->
+                <div x-show="experimentRunning" x-cloak class="bg-indigo-50 border border-indigo-200 rounded-xl p-6">
+                    <div class="flex items-center justify-center">
+                        <div class="text-center">
+                            <div class="relative inline-flex mb-4">
+                                <div class="w-16 h-16 bg-indigo-600 rounded-full animate-pulse"></div>
+                                <div class="absolute inset-0 flex items-center justify-center">
+                                    <svg class="w-8 h-8 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <h3 class="text-lg font-semibold text-indigo-900 mb-1">Experiment Running...</h3>
+                            <p class="text-indigo-700 text-sm">Training models, running cross-validation, and performing genetic algorithm feature selection.</p>
+                            <p class="text-indigo-500 text-xs mt-2">This may take several minutes. Status is checked every 3 seconds.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== SECTION 1: DATASET INFORMATION ==================== -->
+                <div x-show="datasetInfo && !loading" x-cloak>
+                    <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                        <span class="mr-2">📁</span> Dataset Information
+                    </h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- Total Samples -->
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 bg-blue-100 rounded-lg p-3">
+                                    <svg class="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-500">Total Samples</p>
+                                    <p class="text-2xl font-bold text-gray-900" x-text="datasetInfo?.total_samples?.toLocaleString() || '—'"></p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Total Features -->
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 bg-purple-100 rounded-lg p-3">
+                                    <svg class="w-6 h-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-500">Total Features</p>
+                                    <p class="text-2xl font-bold text-gray-900" x-text="datasetInfo?.total_features || '—'"></p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Target Distribution Chart -->
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                            <p class="text-sm font-medium text-gray-500 mb-3">Target Distribution</p>
+                            <div class="h-40">
+                                <canvas id="distributionChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Feature List -->
+                    <div class="mt-4 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <p class="text-sm font-medium text-gray-500 mb-3">Features</p>
+                        <div class="flex flex-wrap gap-2">
+                            <template x-for="feature in (datasetInfo?.features || [])" :key="feature">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800" x-text="feature"></span>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== SECTION 2: EXPERIMENT STATUS ==================== -->
+                <div x-show="results && !loading" x-cloak>
+                    <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                        <span class="mr-2">📋</span> Experiment Status
+                    </h2>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <!-- Status -->
+                            <div>
+                                <p class="text-sm font-medium text-gray-500 mb-1">Status</p>
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold"
+                                      :class="{
+                                          'bg-green-100 text-green-800': results?.status === 'completed',
+                                          'bg-yellow-100 text-yellow-800': results?.status === 'running',
+                                          'bg-red-100 text-red-800': results?.status === 'error',
+                                          'bg-gray-100 text-gray-800': !results?.status || results?.status === 'idle'
+                                      }"
+                                      x-text="results?.status ? results.status.charAt(0).toUpperCase() + results.status.slice(1) : 'Idle'">
+                                </span>
+                            </div>
+                            <!-- Experiment ID -->
+                            <div>
+                                <p class="text-sm font-medium text-gray-500 mb-1">Experiment ID</p>
+                                <p class="text-sm text-gray-900 font-mono" x-text="results?.experiment_id || '—'"></p>
+                            </div>
+                            <!-- Started At -->
+                            <div>
+                                <p class="text-sm font-medium text-gray-500 mb-1">Started At</p>
+                                <p class="text-sm text-gray-900" x-text="results?.started_at ? new Date(results.started_at).toLocaleString() : '—'"></p>
+                            </div>
+                            <!-- Completed At -->
+                            <div>
+                                <p class="text-sm font-medium text-gray-500 mb-1">Completed At</p>
+                                <p class="text-sm text-gray-900" x-text="results?.completed_at ? new Date(results.completed_at).toLocaleString() : '—'"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- No Experiments Message -->
+                <div x-show="!loading && !results && !experimentRunning" x-cloak class="text-center py-16">
+                    <div class="inline-flex items-center justify-center w-20 h-20 bg-gray-100 rounded-full mb-6">
+                        <svg class="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                    </div>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-2">No Experiments Run Yet</h3>
+                    <p class="text-gray-500 mb-6">Click "Run New Experiment" to train models with cross-validation and genetic algorithm feature selection.</p>
+                    <button @click="startExperiment()" class="inline-flex items-center px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+                        <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        Run First Experiment
+                    </button>
+                </div>
+
+                <!-- ==================== SECTION 3: 80:20 TRAIN-TEST SPLIT (XGBoost All Features) ==================== -->
+                <div x-show="results?.split_results && !loading" x-cloak>
+                    <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                        <span class="mr-2">📈</span> 80:20 Train-Test Split — XGBoost (All Features)
+                    </h2>
+                    <!-- Metrics Cards -->
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Accuracy</p>
+                            <p class="text-xl font-bold text-gray-900 mt-1" x-text="results?.split_results?.accuracy != null ? (results.split_results.accuracy * 100).toFixed(2) + '%' : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Precision</p>
+                            <p class="text-xl font-bold text-gray-900 mt-1" x-text="results?.split_results?.precision != null ? (results.split_results.precision * 100).toFixed(2) + '%' : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Recall</p>
+                            <p class="text-xl font-bold text-gray-900 mt-1" x-text="results?.split_results?.recall != null ? (results.split_results.recall * 100).toFixed(2) + '%' : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">F1-Score</p>
+                            <p class="text-xl font-bold text-indigo-600 mt-1" x-text="results?.split_results?.f1 != null ? results.split_results.f1.toFixed(4) : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">ROC-AUC</p>
+                            <p class="text-xl font-bold text-indigo-600 mt-1" x-text="results?.split_results?.roc_auc != null ? results.split_results.roc_auc.toFixed(4) : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Train Time</p>
+                            <p class="text-xl font-bold text-gray-900 mt-1" x-text="results?.split_results?.training_time != null ? results.split_results.training_time.toFixed(2) + 's' : '—'"></p>
+                        </div>
+                    </div>
+                    <!-- Confusion Matrix -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-sm font-semibold text-gray-700 mb-4">Confusion Matrix</h3>
+                        <div class="flex justify-center">
+                            <div class="inline-block">
+                                <div class="flex items-center mb-2">
+                                    <div class="w-24"></div>
+                                    <div class="text-center text-xs font-semibold text-gray-500 w-28">Predicted: 0</div>
+                                    <div class="text-center text-xs font-semibold text-gray-500 w-28">Predicted: 1</div>
+                                </div>
+                                <div class="flex items-center mb-1">
+                                    <div class="w-24 text-right pr-3 text-xs font-semibold text-gray-500">Actual: 0</div>
+                                    <div class="w-28 h-20 bg-green-100 border border-green-300 rounded-lg flex flex-col items-center justify-center mx-1">
+                                        <span class="text-xs text-green-700 font-medium">TN</span>
+                                        <span class="text-lg font-bold text-green-900" x-text="results?.split_results?.confusion_matrix?.[0]?.[0] ?? '—'"></span>
+                                    </div>
+                                    <div class="w-28 h-20 bg-red-100 border border-red-300 rounded-lg flex flex-col items-center justify-center mx-1">
+                                        <span class="text-xs text-red-700 font-medium">FP</span>
+                                        <span class="text-lg font-bold text-red-900" x-text="results?.split_results?.confusion_matrix?.[0]?.[1] ?? '—'"></span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center">
+                                    <div class="w-24 text-right pr-3 text-xs font-semibold text-gray-500">Actual: 1</div>
+                                    <div class="w-28 h-20 bg-orange-100 border border-orange-300 rounded-lg flex flex-col items-center justify-center mx-1">
+                                        <span class="text-xs text-orange-700 font-medium">FN</span>
+                                        <span class="text-lg font-bold text-orange-900" x-text="results?.split_results?.confusion_matrix?.[1]?.[0] ?? '—'"></span>
+                                    </div>
+                                    <div class="w-28 h-20 bg-blue-100 border border-blue-300 rounded-lg flex flex-col items-center justify-center mx-1">
+                                        <span class="text-xs text-blue-700 font-medium">TP</span>
+                                        <span class="text-lg font-bold text-blue-900" x-text="results?.split_results?.confusion_matrix?.[1]?.[1] ?? '—'"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== SECTION 4: CROSS-VALIDATION RESULTS ==================== -->
+                <div x-show="results?.cv5_results && !loading" x-cloak>
+                    <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                        <span class="mr-2">🔄</span> Cross-Validation Results (XGBoost — All Features)
+                    </h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- 5-Fold CV -->
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-4">5-Fold Cross-Validation</h3>
+                            <div class="grid grid-cols-3 gap-3 mb-4">
+                                <div class="bg-blue-50 rounded-lg p-3 text-center">
+                                    <p class="text-xs text-blue-600 font-medium">Mean Accuracy</p>
+                                    <p class="text-sm font-bold text-blue-900" x-text="results?.cv5_results?.mean_accuracy != null ? results.cv5_results.mean_accuracy.toFixed(4) + ' ± ' + (results.cv5_results.std_accuracy?.toFixed(4) || '0') : '—'"></p>
+                                </div>
+                                <div class="bg-purple-50 rounded-lg p-3 text-center">
+                                    <p class="text-xs text-purple-600 font-medium">Mean F1</p>
+                                    <p class="text-sm font-bold text-purple-900" x-text="results?.cv5_results?.mean_f1 != null ? results.cv5_results.mean_f1.toFixed(4) + ' ± ' + (results.cv5_results.std_f1?.toFixed(4) || '0') : '—'"></p>
+                                </div>
+                                <div class="bg-green-50 rounded-lg p-3 text-center">
+                                    <p class="text-xs text-green-600 font-medium">Mean ROC-AUC</p>
+                                    <p class="text-sm font-bold text-green-900" x-text="results?.cv5_results?.mean_roc_auc != null ? results.cv5_results.mean_roc_auc.toFixed(4) + ' ± ' + (results.cv5_results.std_roc_auc?.toFixed(4) || '0') : '—'"></p>
+                                </div>
+                            </div>
+                            <div class="h-48">
+                                <canvas id="foldChart5"></canvas>
+                            </div>
+                        </div>
+                        <!-- 10-Fold CV -->
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-4">10-Fold Cross-Validation</h3>
+                            <div class="grid grid-cols-3 gap-3 mb-4">
+                                <div class="bg-blue-50 rounded-lg p-3 text-center">
+                                    <p class="text-xs text-blue-600 font-medium">Mean Accuracy</p>
+                                    <p class="text-sm font-bold text-blue-900" x-text="results?.cv10_results?.mean_accuracy != null ? results.cv10_results.mean_accuracy.toFixed(4) + ' ± ' + (results.cv10_results.std_accuracy?.toFixed(4) || '0') : '—'"></p>
+                                </div>
+                                <div class="bg-purple-50 rounded-lg p-3 text-center">
+                                    <p class="text-xs text-purple-600 font-medium">Mean F1</p>
+                                    <p class="text-sm font-bold text-purple-900" x-text="results?.cv10_results?.mean_f1 != null ? results.cv10_results.mean_f1.toFixed(4) + ' ± ' + (results.cv10_results.std_f1?.toFixed(4) || '0') : '—'"></p>
+                                </div>
+                                <div class="bg-green-50 rounded-lg p-3 text-center">
+                                    <p class="text-xs text-green-600 font-medium">Mean ROC-AUC</p>
+                                    <p class="text-sm font-bold text-green-900" x-text="results?.cv10_results?.mean_roc_auc != null ? results.cv10_results.mean_roc_auc.toFixed(4) + ' ± ' + (results.cv10_results.std_roc_auc?.toFixed(4) || '0') : '—'"></p>
+                                </div>
+                            </div>
+                            <div class="h-48">
+                                <canvas id="foldChart10"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== SECTION 5: GENETIC ALGORITHM FEATURE SELECTION ==================== -->
+                <div x-show="results?.ga_results && !loading" x-cloak>
+                    <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                        <span class="mr-2">🧬</span> Genetic Algorithm Feature Selection
+                    </h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
+                        <!-- GA Configuration -->
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-4">GA Configuration</h3>
+                            <div class="space-y-3">
+                                <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                    <span class="text-sm text-gray-500">Population Size</span>
+                                    <span class="text-sm font-semibold text-gray-900" x-text="results?.ga_results?.config?.population_size ?? '—'"></span>
+                                </div>
+                                <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                    <span class="text-sm text-gray-500">Generations</span>
+                                    <span class="text-sm font-semibold text-gray-900" x-text="results?.ga_results?.config?.generations ?? '—'"></span>
+                                </div>
+                                <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                    <span class="text-sm text-gray-500">Crossover Rate</span>
+                                    <span class="text-sm font-semibold text-gray-900" x-text="results?.ga_results?.config?.crossover_rate ?? '—'"></span>
+                                </div>
+                                <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                    <span class="text-sm text-gray-500">Mutation Rate</span>
+                                    <span class="text-sm font-semibold text-gray-900" x-text="results?.ga_results?.config?.mutation_rate ?? '—'"></span>
+                                </div>
+                                <div class="flex justify-between items-center py-2">
+                                    <span class="text-sm text-gray-500">Tournament Size</span>
+                                    <span class="text-sm font-semibold text-gray-900" x-text="results?.ga_results?.config?.tournament_size ?? '—'"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Best Fitness & Features Retained -->
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-4">Selection Summary</h3>
+                            <div class="grid grid-cols-2 gap-4 mb-4">
+                                <div class="bg-indigo-50 rounded-lg p-4 text-center">
+                                    <p class="text-xs text-indigo-600 font-medium">Best Fitness (F1)</p>
+                                    <p class="text-2xl font-bold text-indigo-900" x-text="results?.ga_results?.best_fitness != null ? results.ga_results.best_fitness.toFixed(4) : '—'"></p>
+                                </div>
+                                <div class="bg-emerald-50 rounded-lg p-4 text-center">
+                                    <p class="text-xs text-emerald-600 font-medium">Features Retained</p>
+                                    <p class="text-2xl font-bold text-emerald-900" x-text="results?.ga_results?.selected_features?.length ?? '—'"></p>
+                                    <p class="text-xs text-emerald-600" x-text="'out of ' + (datasetInfo?.total_features ?? '—')"></p>
+                                </div>
+                            </div>
+                            <!-- Binary Feature Mask -->
+                            <div>
+                                <p class="text-xs font-medium text-gray-500 mb-2">Binary Feature Mask</p>
+                                <div class="flex flex-wrap gap-1">
+                                    <template x-for="(bit, idx) in (results?.ga_results?.feature_mask || [])" :key="idx">
+                                        <div class="w-7 h-7 rounded flex items-center justify-center text-xs font-bold"
+                                             :class="bit === 1 ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-400'"
+                                             x-text="bit"></div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Selected / Excluded Features -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-3">✅ Selected Features</h3>
+                            <div class="flex flex-wrap gap-2">
+                                <template x-for="f in (results?.ga_results?.selected_features || [])" :key="f">
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800" x-text="f"></span>
+                                </template>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-3">❌ Excluded Features</h3>
+                            <div class="flex flex-wrap gap-2">
+                                <template x-for="f in (results?.ga_results?.excluded_features || [])" :key="f">
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800" x-text="f"></span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Fitness Progression Chart -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-sm font-semibold text-gray-700 mb-4">Fitness Progression Over Generations</h3>
+                        <div class="h-64">
+                            <canvas id="fitnessChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== SECTION 6: GA + XGBoost RESULTS ==================== -->
+                <div x-show="results?.ga_xgboost_results && !loading" x-cloak>
+                    <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                        <span class="mr-2">🚀</span> GA + XGBoost Results (Selected Features)
+                    </h2>
+                    <!-- 80:20 Split Metrics -->
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Accuracy</p>
+                            <p class="text-xl font-bold text-gray-900 mt-1" x-text="results?.ga_xgboost_results?.split?.accuracy != null ? (results.ga_xgboost_results.split.accuracy * 100).toFixed(2) + '%' : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Precision</p>
+                            <p class="text-xl font-bold text-gray-900 mt-1" x-text="results?.ga_xgboost_results?.split?.precision != null ? (results.ga_xgboost_results.split.precision * 100).toFixed(2) + '%' : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Recall</p>
+                            <p class="text-xl font-bold text-gray-900 mt-1" x-text="results?.ga_xgboost_results?.split?.recall != null ? (results.ga_xgboost_results.split.recall * 100).toFixed(2) + '%' : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">F1-Score</p>
+                            <p class="text-xl font-bold text-indigo-600 mt-1" x-text="results?.ga_xgboost_results?.split?.f1 != null ? results.ga_xgboost_results.split.f1.toFixed(4) : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">ROC-AUC</p>
+                            <p class="text-xl font-bold text-indigo-600 mt-1" x-text="results?.ga_xgboost_results?.split?.roc_auc != null ? results.ga_xgboost_results.split.roc_auc.toFixed(4) : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Train Time</p>
+                            <p class="text-xl font-bold text-gray-900 mt-1" x-text="results?.ga_xgboost_results?.split?.training_time != null ? results.ga_xgboost_results.split.training_time.toFixed(2) + 's' : '—'"></p>
+                        </div>
+                    </div>
+                    <!-- Confusion Matrix -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-4">
+                        <h3 class="text-sm font-semibold text-gray-700 mb-4">Confusion Matrix</h3>
+                        <div class="flex justify-center">
+                            <div class="inline-block">
+                                <div class="flex items-center mb-2">
+                                    <div class="w-24"></div>
+                                    <div class="text-center text-xs font-semibold text-gray-500 w-28">Predicted: 0</div>
+                                    <div class="text-center text-xs font-semibold text-gray-500 w-28">Predicted: 1</div>
+                                </div>
+                                <div class="flex items-center mb-1">
+                                    <div class="w-24 text-right pr-3 text-xs font-semibold text-gray-500">Actual: 0</div>
+                                    <div class="w-28 h-20 bg-green-100 border border-green-300 rounded-lg flex flex-col items-center justify-center mx-1">
+                                        <span class="text-xs text-green-700 font-medium">TN</span>
+                                        <span class="text-lg font-bold text-green-900" x-text="results?.ga_xgboost_results?.split?.confusion_matrix?.[0]?.[0] ?? '—'"></span>
+                                    </div>
+                                    <div class="w-28 h-20 bg-red-100 border border-red-300 rounded-lg flex flex-col items-center justify-center mx-1">
+                                        <span class="text-xs text-red-700 font-medium">FP</span>
+                                        <span class="text-lg font-bold text-red-900" x-text="results?.ga_xgboost_results?.split?.confusion_matrix?.[0]?.[1] ?? '—'"></span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center">
+                                    <div class="w-24 text-right pr-3 text-xs font-semibold text-gray-500">Actual: 1</div>
+                                    <div class="w-28 h-20 bg-orange-100 border border-orange-300 rounded-lg flex flex-col items-center justify-center mx-1">
+                                        <span class="text-xs text-orange-700 font-medium">FN</span>
+                                        <span class="text-lg font-bold text-orange-900" x-text="results?.ga_xgboost_results?.split?.confusion_matrix?.[1]?.[0] ?? '—'"></span>
+                                    </div>
+                                    <div class="w-28 h-20 bg-blue-100 border border-blue-300 rounded-lg flex flex-col items-center justify-center mx-1">
+                                        <span class="text-xs text-blue-700 font-medium">TP</span>
+                                        <span class="text-lg font-bold text-blue-900" x-text="results?.ga_xgboost_results?.split?.confusion_matrix?.[1]?.[1] ?? '—'"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- CV Results Table -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-sm font-semibold text-gray-700 mb-4">Cross-Validation Results</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Metric</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">5-Fold CV</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">10-Fold CV</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-medium text-gray-900">Mean Accuracy</td>
+                                        <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="results?.ga_xgboost_results?.cv5?.mean_accuracy != null ? results.ga_xgboost_results.cv5.mean_accuracy.toFixed(4) + ' ± ' + (results.ga_xgboost_results.cv5.std_accuracy?.toFixed(4) || '0') : '—'"></td>
+                                        <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="results?.ga_xgboost_results?.cv10?.mean_accuracy != null ? results.ga_xgboost_results.cv10.mean_accuracy.toFixed(4) + ' ± ' + (results.ga_xgboost_results.cv10.std_accuracy?.toFixed(4) || '0') : '—'"></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-medium text-gray-900">Mean F1</td>
+                                        <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="results?.ga_xgboost_results?.cv5?.mean_f1 != null ? results.ga_xgboost_results.cv5.mean_f1.toFixed(4) + ' ± ' + (results.ga_xgboost_results.cv5.std_f1?.toFixed(4) || '0') : '—'"></td>
+                                        <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="results?.ga_xgboost_results?.cv10?.mean_f1 != null ? results.ga_xgboost_results.cv10.mean_f1.toFixed(4) + ' ± ' + (results.ga_xgboost_results.cv10.std_f1?.toFixed(4) || '0') : '—'"></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-medium text-gray-900">Mean ROC-AUC</td>
+                                        <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="results?.ga_xgboost_results?.cv5?.mean_roc_auc != null ? results.ga_xgboost_results.cv5.mean_roc_auc.toFixed(4) + ' ± ' + (results.ga_xgboost_results.cv5.std_roc_auc?.toFixed(4) || '0') : '—'"></td>
+                                        <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="results?.ga_xgboost_results?.cv10?.mean_roc_auc != null ? results.ga_xgboost_results.cv10.mean_roc_auc.toFixed(4) + ' ± ' + (results.ga_xgboost_results.cv10.std_roc_auc?.toFixed(4) || '0') : '—'"></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== SECTION 7: GA + RANDOM FOREST RESULTS ==================== -->
+                <div x-show="results?.ga_rf_results && !loading" x-cloak>
+                    <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                        <span class="mr-2">🌲</span> GA + Random Forest Results (Selected Features)
+                    </h2>
+                    <!-- 80:20 Split Metrics -->
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Accuracy</p>
+                            <p class="text-xl font-bold text-gray-900 mt-1" x-text="results?.ga_rf_results?.split?.accuracy != null ? (results.ga_rf_results.split.accuracy * 100).toFixed(2) + '%' : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Precision</p>
+                            <p class="text-xl font-bold text-gray-900 mt-1" x-text="results?.ga_rf_results?.split?.precision != null ? (results.ga_rf_results.split.precision * 100).toFixed(2) + '%' : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Recall</p>
+                            <p class="text-xl font-bold text-gray-900 mt-1" x-text="results?.ga_rf_results?.split?.recall != null ? (results.ga_rf_results.split.recall * 100).toFixed(2) + '%' : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">F1-Score</p>
+                            <p class="text-xl font-bold text-emerald-600 mt-1" x-text="results?.ga_rf_results?.split?.f1 != null ? results.ga_rf_results.split.f1.toFixed(4) : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">ROC-AUC</p>
+                            <p class="text-xl font-bold text-emerald-600 mt-1" x-text="results?.ga_rf_results?.split?.roc_auc != null ? results.ga_rf_results.split.roc_auc.toFixed(4) : '—'"></p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Train Time</p>
+                            <p class="text-xl font-bold text-gray-900 mt-1" x-text="results?.ga_rf_results?.split?.training_time != null ? results.ga_rf_results.split.training_time.toFixed(2) + 's' : '—'"></p>
+                        </div>
+                    </div>
+                    <!-- Confusion Matrix -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-4">
+                        <h3 class="text-sm font-semibold text-gray-700 mb-4">Confusion Matrix</h3>
+                        <div class="flex justify-center">
+                            <div class="inline-block">
+                                <div class="flex items-center mb-2">
+                                    <div class="w-24"></div>
+                                    <div class="text-center text-xs font-semibold text-gray-500 w-28">Predicted: 0</div>
+                                    <div class="text-center text-xs font-semibold text-gray-500 w-28">Predicted: 1</div>
+                                </div>
+                                <div class="flex items-center mb-1">
+                                    <div class="w-24 text-right pr-3 text-xs font-semibold text-gray-500">Actual: 0</div>
+                                    <div class="w-28 h-20 bg-green-100 border border-green-300 rounded-lg flex flex-col items-center justify-center mx-1">
+                                        <span class="text-xs text-green-700 font-medium">TN</span>
+                                        <span class="text-lg font-bold text-green-900" x-text="results?.ga_rf_results?.split?.confusion_matrix?.[0]?.[0] ?? '—'"></span>
+                                    </div>
+                                    <div class="w-28 h-20 bg-red-100 border border-red-300 rounded-lg flex flex-col items-center justify-center mx-1">
+                                        <span class="text-xs text-red-700 font-medium">FP</span>
+                                        <span class="text-lg font-bold text-red-900" x-text="results?.ga_rf_results?.split?.confusion_matrix?.[0]?.[1] ?? '—'"></span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center">
+                                    <div class="w-24 text-right pr-3 text-xs font-semibold text-gray-500">Actual: 1</div>
+                                    <div class="w-28 h-20 bg-orange-100 border border-orange-300 rounded-lg flex flex-col items-center justify-center mx-1">
+                                        <span class="text-xs text-orange-700 font-medium">FN</span>
+                                        <span class="text-lg font-bold text-orange-900" x-text="results?.ga_rf_results?.split?.confusion_matrix?.[1]?.[0] ?? '—'"></span>
+                                    </div>
+                                    <div class="w-28 h-20 bg-blue-100 border border-blue-300 rounded-lg flex flex-col items-center justify-center mx-1">
+                                        <span class="text-xs text-blue-700 font-medium">TP</span>
+                                        <span class="text-lg font-bold text-blue-900" x-text="results?.ga_rf_results?.split?.confusion_matrix?.[1]?.[1] ?? '—'"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- CV Results Table -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-sm font-semibold text-gray-700 mb-4">Cross-Validation Results</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Metric</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">5-Fold CV</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">10-Fold CV</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-medium text-gray-900">Mean Accuracy</td>
+                                        <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="results?.ga_rf_results?.cv5?.mean_accuracy != null ? results.ga_rf_results.cv5.mean_accuracy.toFixed(4) + ' ± ' + (results.ga_rf_results.cv5.std_accuracy?.toFixed(4) || '0') : '—'"></td>
+                                        <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="results?.ga_rf_results?.cv10?.mean_accuracy != null ? results.ga_rf_results.cv10.mean_accuracy.toFixed(4) + ' ± ' + (results.ga_rf_results.cv10.std_accuracy?.toFixed(4) || '0') : '—'"></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-medium text-gray-900">Mean F1</td>
+                                        <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="results?.ga_rf_results?.cv5?.mean_f1 != null ? results.ga_rf_results.cv5.mean_f1.toFixed(4) + ' ± ' + (results.ga_rf_results.cv5.std_f1?.toFixed(4) || '0') : '—'"></td>
+                                        <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="results?.ga_rf_results?.cv10?.mean_f1 != null ? results.ga_rf_results.cv10.mean_f1.toFixed(4) + ' ± ' + (results.ga_rf_results.cv10.std_f1?.toFixed(4) || '0') : '—'"></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-medium text-gray-900">Mean ROC-AUC</td>
+                                        <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="results?.ga_rf_results?.cv5?.mean_roc_auc != null ? results.ga_rf_results.cv5.mean_roc_auc.toFixed(4) + ' ± ' + (results.ga_rf_results.cv5.std_roc_auc?.toFixed(4) || '0') : '—'"></td>
+                                        <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="results?.ga_rf_results?.cv10?.mean_roc_auc != null ? results.ga_rf_results.cv10.mean_roc_auc.toFixed(4) + ' ± ' + (results.ga_rf_results.cv10.std_roc_auc?.toFixed(4) || '0') : '—'"></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== SECTION 8: MODEL COMPARISON ==================== -->
+                <div x-show="results?.comparison_table && !loading" x-cloak>
+                    <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                        <span class="mr-2">🏆</span> Model Comparison
+                    </h2>
+                    <!-- Best Model Highlight -->
+                    <div class="bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-xl p-6 mb-4" x-show="results?.best_model">
+                        <div class="flex items-center">
+                            <span class="text-3xl mr-4">🥇</span>
+                            <div>
+                                <p class="text-sm font-medium text-yellow-800">Best Performing Model</p>
+                                <p class="text-xl font-bold text-yellow-900" x-text="results?.best_model?.name || '—'"></p>
+                                <p class="text-sm text-yellow-700">
+                                    F1: <span class="font-semibold" x-text="results?.best_model?.f1?.toFixed(4) || '—'"></span> |
+                                    ROC-AUC: <span class="font-semibold" x-text="results?.best_model?.roc_auc?.toFixed(4) || '—'"></span>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Comparison Table -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-4">
+                        <h3 class="text-sm font-semibold text-gray-700 mb-4">Full Comparison Table</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Model</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Accuracy</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Precision</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Recall</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">F1-Score</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">ROC-AUC</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">CV-5 F1</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">CV-10 F1</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <template x-for="(row, idx) in (results?.comparison_table || [])" :key="idx">
+                                        <tr :class="row.name === results?.best_model?.name ? 'bg-yellow-50' : ''">
+                                            <td class="px-4 py-3 text-sm font-medium text-gray-900">
+                                                <span x-text="row.name"></span>
+                                                <span x-show="row.name === results?.best_model?.name" class="ml-1">🥇</span>
+                                            </td>
+                                            <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="row.accuracy != null ? (row.accuracy * 100).toFixed(2) + '%' : '—'"></td>
+                                            <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="row.precision != null ? (row.precision * 100).toFixed(2) + '%' : '—'"></td>
+                                            <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="row.recall != null ? (row.recall * 100).toFixed(2) + '%' : '—'"></td>
+                                            <td class="px-4 py-3 text-sm text-center font-semibold" :class="row.name === results?.best_model?.name ? 'text-indigo-700' : 'text-gray-700'" x-text="row.f1 != null ? row.f1.toFixed(4) : '—'"></td>
+                                            <td class="px-4 py-3 text-sm text-center font-semibold" :class="row.name === results?.best_model?.name ? 'text-indigo-700' : 'text-gray-700'" x-text="row.roc_auc != null ? row.roc_auc.toFixed(4) : '—'"></td>
+                                            <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="row.cv5_f1 != null ? row.cv5_f1.toFixed(4) : '—'"></td>
+                                            <td class="px-4 py-3 text-sm text-center text-gray-700" x-text="row.cv10_f1 != null ? row.cv10_f1.toFixed(4) : '—'"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <!-- Comparison Charts -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-sm font-semibold text-gray-700 mb-4">F1-Score & ROC-AUC Comparison</h3>
+                        <div class="h-72">
+                            <canvas id="comparisonChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function experimentsPage() {
+    return {
+        sidebarOpen: false,
+        loading: true,
+        experimentRunning: false,
+        experimentId: null,
+        datasetInfo: null,
+        results: null,
+        error: null,
+        statusCheckInterval: null,
+
+        // Charts
+        foldChart5: null,
+        foldChart10: null,
+        fitnessChart: null,
+        comparisonChart: null,
+        distributionChart: null,
+
+        init() {
+            this.loadDatasetInfo();
+            this.loadLatestResults();
+        },
+
+        async loadDatasetInfo() {
+            try {
+                const res = await fetch('/api/experiments/dataset-info');
+                if (res.ok) {
+                    this.datasetInfo = await res.json();
+                    this.$nextTick(() => this.renderDistributionChart());
+                }
+            } catch (e) {
+                console.error('Failed to load dataset info:', e);
+            }
+        },
+
+        transformResults(data) {
+            // Restructure flat API response into nested format expected by template
+            if (data.ga_xgboost_split_results || data.ga_xgboost_cv5_results || data.ga_xgboost_cv10_results) {
+                data.ga_xgboost_results = {
+                    split: data.ga_xgboost_split_results || null,
+                    cv5: data.ga_xgboost_cv5_results || null,
+                    cv10: data.ga_xgboost_cv10_results || null
+                };
+            }
+            if (data.ga_rf_split_results || data.ga_rf_cv5_results || data.ga_rf_cv10_results) {
+                data.ga_rf_results = {
+                    split: data.ga_rf_split_results || null,
+                    cv5: data.ga_rf_cv5_results || null,
+                    cv10: data.ga_rf_cv10_results || null
+                };
+            }
+            return data;
+        },
+
+        async loadLatestResults() {
+            try {
+                const res = await fetch('/api/experiments/latest');
+                if (res.ok) {
+                    this.results = this.transformResults(await res.json());
+                    this.loading = false;
+                    this.$nextTick(() => this.renderAllCharts());
+                } else {
+                    this.loading = false;
+                }
+            } catch (e) {
+                this.loading = false;
+                console.error('Failed to load latest results:', e);
+            }
+        },
+
+        async startExperiment() {
+            if (this.experimentRunning) return;
+            this.experimentRunning = true;
+            this.error = null;
+            try {
+                const res = await fetch('/api/experiments/run', { method: 'POST' });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Failed to start experiment');
+                }
+                const data = await res.json();
+                this.experimentId = data.experiment_id;
+                this.checkStatus();
+            } catch (e) {
+                this.error = e.message;
+                this.experimentRunning = false;
+            }
+        },
+
+        async checkStatus() {
+            this.statusCheckInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/experiments/status/${this.experimentId}`);
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (data.status === 'completed') {
+                        clearInterval(this.statusCheckInterval);
+                        this.statusCheckInterval = null;
+                        this.experimentRunning = false;
+                        await this.loadResults(this.experimentId);
+                    } else if (data.status === 'error') {
+                        clearInterval(this.statusCheckInterval);
+                        this.statusCheckInterval = null;
+                        this.experimentRunning = false;
+                        this.error = data.error_message || 'Experiment failed';
+                    }
+                } catch (e) {
+                    /* retry on next interval */
+                }
+            }, 3000);
+        },
+
+        async loadResults(id) {
+            try {
+                const res = await fetch(`/api/experiments/results/${id}`);
+                if (res.ok) {
+                    this.results = this.transformResults(await res.json());
+                    this.$nextTick(() => this.renderAllCharts());
+                }
+            } catch (e) {
+                console.error('Failed to load results:', e);
+            }
+        },
+
+        renderAllCharts() {
+            this.renderDistributionChart();
+            this.renderFoldCharts();
+            this.renderFitnessChart();
+            this.renderComparisonCharts();
+        },
+
+        renderDistributionChart() {
+            if (!this.datasetInfo?.target_distribution) return;
+            const canvas = document.getElementById('distributionChart');
+            if (!canvas) return;
+
+            if (this.distributionChart) {
+                this.distributionChart.destroy();
+                this.distributionChart = null;
+            }
+
+            const dist = this.datasetInfo.target_distribution;
+            const labels = Object.keys(dist).map(k => k === '0' ? 'No Default (0)' : 'Default (1)');
+            const values = Object.values(dist);
+            const colors = Object.keys(dist).map(k => k === '0' ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)');
+            const borderColors = Object.keys(dist).map(k => k === '0' ? 'rgba(34, 197, 94, 1)' : 'rgba(239, 68, 68, 1)');
+
+            this.distributionChart = new Chart(canvas.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Count',
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: borderColors,
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { font: { size: 10 } },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        x: {
+                            ticks: { font: { size: 10 } },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        },
+
+        renderFoldCharts() {
+            // 5-Fold CV Chart
+            if (this.results?.cv5_results?.fold_scores) {
+                const canvas5 = document.getElementById('foldChart5');
+                if (canvas5) {
+                    if (this.foldChart5) {
+                        this.foldChart5.destroy();
+                        this.foldChart5 = null;
+                    }
+                    const scores = this.results.cv5_results.fold_scores;
+                    const labels = scores.map((_, i) => `Fold ${i + 1}`);
+                    const f1Scores = scores.map(s => s.f1);
+                    const accScores = scores.map(s => s.accuracy);
+                    const aucScores = scores.map(s => s.roc_auc);
+
+                    this.foldChart5 = new Chart(canvas5.getContext('2d'), {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'F1-Score',
+                                    data: f1Scores,
+                                    backgroundColor: 'rgba(99, 102, 241, 0.8)',
+                                    borderColor: 'rgba(99, 102, 241, 1)',
+                                    borderWidth: 1,
+                                    borderRadius: 4
+                                },
+                                {
+                                    label: 'Accuracy',
+                                    data: accScores,
+                                    backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                                    borderColor: 'rgba(59, 130, 246, 1)',
+                                    borderWidth: 1,
+                                    borderRadius: 4
+                                },
+                                {
+                                    label: 'ROC-AUC',
+                                    data: aucScores,
+                                    backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                                    borderColor: 'rgba(16, 185, 129, 1)',
+                                    borderWidth: 1,
+                                    borderRadius: 4
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'top', labels: { font: { size: 10 }, boxWidth: 12 } }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: false,
+                                    min: Math.max(0, Math.min(...f1Scores, ...accScores, ...aucScores) - 0.05),
+                                    max: 1,
+                                    ticks: { font: { size: 10 } },
+                                    grid: { color: 'rgba(0,0,0,0.05)' }
+                                },
+                                x: {
+                                    ticks: { font: { size: 10 } },
+                                    grid: { display: false }
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+
+            // 10-Fold CV Chart
+            if (this.results?.cv10_results?.fold_scores) {
+                const canvas10 = document.getElementById('foldChart10');
+                if (canvas10) {
+                    if (this.foldChart10) {
+                        this.foldChart10.destroy();
+                        this.foldChart10 = null;
+                    }
+                    const scores = this.results.cv10_results.fold_scores;
+                    const labels = scores.map((_, i) => `Fold ${i + 1}`);
+                    const f1Scores = scores.map(s => s.f1);
+                    const accScores = scores.map(s => s.accuracy);
+                    const aucScores = scores.map(s => s.roc_auc);
+
+                    this.foldChart10 = new Chart(canvas10.getContext('2d'), {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'F1-Score',
+                                    data: f1Scores,
+                                    backgroundColor: 'rgba(99, 102, 241, 0.8)',
+                                    borderColor: 'rgba(99, 102, 241, 1)',
+                                    borderWidth: 1,
+                                    borderRadius: 4
+                                },
+                                {
+                                    label: 'Accuracy',
+                                    data: accScores,
+                                    backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                                    borderColor: 'rgba(59, 130, 246, 1)',
+                                    borderWidth: 1,
+                                    borderRadius: 4
+                                },
+                                {
+                                    label: 'ROC-AUC',
+                                    data: aucScores,
+                                    backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                                    borderColor: 'rgba(16, 185, 129, 1)',
+                                    borderWidth: 1,
+                                    borderRadius: 4
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'top', labels: { font: { size: 10 }, boxWidth: 12 } }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: false,
+                                    min: Math.max(0, Math.min(...f1Scores, ...accScores, ...aucScores) - 0.05),
+                                    max: 1,
+                                    ticks: { font: { size: 10 } },
+                                    grid: { color: 'rgba(0,0,0,0.05)' }
+                                },
+                                x: {
+                                    ticks: { font: { size: 10 } },
+                                    grid: { display: false }
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        },
+
+        renderFitnessChart() {
+            if (!this.results?.ga_results?.fitness_history) return;
+            const canvas = document.getElementById('fitnessChart');
+            if (!canvas) return;
+
+            if (this.fitnessChart) {
+                this.fitnessChart.destroy();
+                this.fitnessChart = null;
+            }
+
+            const history = this.results.ga_results.fitness_history;
+            const labels = history.map((_, i) => `Gen ${i + 1}`);
+
+            this.fitnessChart = new Chart(canvas.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Best Fitness (F1)',
+                        data: history,
+                        borderColor: 'rgba(99, 102, 241, 1)',
+                        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointBackgroundColor: 'rgba(99, 102, 241, 1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { font: { size: 11 } } }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: { display: true, text: 'Best Fitness (F1)', font: { size: 11 } },
+                            ticks: { font: { size: 10 } },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        x: {
+                            title: { display: true, text: 'Generation', font: { size: 11 } },
+                            ticks: {
+                                font: { size: 10 },
+                                maxTicksLimit: 20
+                            },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        },
+
+        renderComparisonCharts() {
+            if (!this.results?.comparison_table || this.results.comparison_table.length === 0) return;
+            const canvas = document.getElementById('comparisonChart');
+            if (!canvas) return;
+
+            if (this.comparisonChart) {
+                this.comparisonChart.destroy();
+                this.comparisonChart = null;
+            }
+
+            const table = this.results.comparison_table;
+            const labels = table.map(r => r.name);
+            const f1Scores = table.map(r => r.f1);
+            const aucScores = table.map(r => r.roc_auc);
+            const accScores = table.map(r => r.accuracy);
+
+            this.comparisonChart = new Chart(canvas.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'F1-Score',
+                            data: f1Scores,
+                            backgroundColor: 'rgba(99, 102, 241, 0.8)',
+                            borderColor: 'rgba(99, 102, 241, 1)',
+                            borderWidth: 1,
+                            borderRadius: 6
+                        },
+                        {
+                            label: 'ROC-AUC',
+                            data: aucScores,
+                            backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                            borderColor: 'rgba(16, 185, 129, 1)',
+                            borderWidth: 1,
+                            borderRadius: 6
+                        },
+                        {
+                            label: 'Accuracy',
+                            data: accScores,
+                            backgroundColor: 'rgba(245, 158, 11, 0.8)',
+                            borderColor: 'rgba(245, 158, 11, 1)',
+                            borderWidth: 1,
+                            borderRadius: 6
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { font: { size: 11 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.parsed.y.toFixed(4);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            min: Math.max(0, Math.min(...f1Scores, ...aucScores, ...accScores) - 0.05),
+                            max: 1,
+                            ticks: { font: { size: 10 } },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        x: {
+                            ticks: { font: { size: 10 } },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        },
+
+        async exportJSON() {
+            const id = this.results?.experiment_id || this.experimentId;
+            if (!id) return;
+            window.location.href = `/api/experiments/results/${id}/export/json`;
+        },
+
+        async exportCSV() {
+            const id = this.results?.experiment_id || this.experimentId;
+            if (!id) return;
+            window.location.href = `/api/experiments/results/${id}/export/csv`;
+        }
+    };
+}
+</script>
+{% endblock %}

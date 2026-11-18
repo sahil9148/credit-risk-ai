@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import engine, init_db, SessionLocal, Base
 from app.models import User
 from app.services.auth_service import get_password_hash
-from app.routers import auth, applications, assessments, admin, pages
+from app.routers import auth, applications, assessments, admin, pages, experiments
 
 
 def _seed_admin():
@@ -62,6 +62,9 @@ async def db_error_handling_middleware(request: Request, call_next):
     try:
         return await call_next(request)
     except Exception as exc:
+        from fastapi import HTTPException as _HTTPExc
+        if isinstance(exc, _HTTPExc):
+            raise  # Let FastAPI handle HTTPException (404, 401, etc.)
         import traceback
         err_msg = traceback.format_exc()
         print(f"SERVER ERROR ON {request.method} {request.url.path}:\n{err_msg}")
@@ -82,6 +85,7 @@ app.include_router(auth.router)
 app.include_router(applications.router)
 app.include_router(assessments.router)
 app.include_router(admin.router)
+app.include_router(experiments.router)
 
 
 @app.exception_handler(404)
